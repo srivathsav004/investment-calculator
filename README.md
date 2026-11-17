@@ -6,7 +6,7 @@ Fixed-income and provident-fund simulator for Indian investors. Built with Next.
 |---|---|
 | `/` | Portfolio overview: every asset fed the same SIP and ranked by post-tax XIRR |
 | `/ppf` | PPF: yearly lump sum or monthly deposits, 5th-of-month interest, four deposit-timing modes, Form H extensions |
-| `/epf` | EPF + VPF: month-by-month from your UAN start to age 58, ₹15k → ₹25k wage ceiling (17 Sep 2026), EPS cap, ₹2.5L taxable-interest bucket, EPS pension estimate |
+| `/epf` | EPF: month-by-month from your UAN start to age 58, ₹15k → ₹25k wage ceiling (17 Sep 2026), EPS cap, ₹2.5L taxable-interest bucket, EPS pension estimate |
 | `/auto-sweep` | ICICI Money Multiplier: ₹5k sweep units, LIFO reverse sweep, 1% break penalty, TDS |
 | `/idfc-vs-sweep` | IDFC progressive slabs vs sweep, with the exact post-tax crossover balance |
 

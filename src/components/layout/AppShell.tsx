@@ -50,7 +50,7 @@ const OVERVIEW: NavItem = { href: "/", label: "Portfolio Overview", description:
 
 const CALCULATORS: NavItem[] = [
   { href: "/ppf", label: "PPF", description: "Public Provident Fund", icon: Landmark },
-  { href: "/epf", label: "EPF + VPF", description: "Provident Fund & EPS", icon: BriefcaseBusiness },
+  { href: "/epf", label: "EPF", description: "Provident Fund & EPS", icon: BriefcaseBusiness },
   { href: "/auto-sweep", label: "Auto-Sweep", description: "ICICI Money Multiplier", icon: ArrowDownUp },
   { href: "/idfc-vs-sweep", label: "IDFC vs Sweep", description: "Progressive savings crossover", icon: GitCompareArrows },
 ];

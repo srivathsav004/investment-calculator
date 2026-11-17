@@ -26,8 +26,6 @@ const DEFAULTS = {
   dob: "2004-06-15",
   start: "2025-08",
   basic: 25000,
-  hike: 0.08,
-  vpf: 0,
   cap: true,
   eps: true,
 };
@@ -35,7 +33,6 @@ const DEFAULTS = {
 const SERIES: ChartSeries[] = [
   { key: "taxFree", label: "EPF · tax-free bucket", color: "var(--chart-1)" },
   { key: "taxable", label: "EPF · taxable bucket", color: "var(--chart-2)" },
-  { key: "pension", label: "EPS pension pool (0%)", color: "var(--chart-3)" },
 ];
 
 const DOB_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
@@ -53,7 +50,7 @@ function durationLabel(months: number): string {
 export function EpfCalculator() {
   const { slab, adjust, isReal } = useGlobalSettings();
   const [s, set, reset] = useUrlState(DEFAULTS, {
-    bounds: { rate: [0.07, 0.095], basic: [8000, 200000], hike: [0, 0.15], vpf: [0, 0.5] },
+    bounds: { rate: [0.07, 0.095], basic: [8000, 200000] },
   });
   const dob = DOB_PATTERN.test(s.dob) ? s.dob : DEFAULTS.dob;
   const start = MONTH_PATTERN.test(s.start) ? s.start : DEFAULTS.start;
@@ -63,8 +60,7 @@ export function EpfCalculator() {
       simulateEpf({
         rate: s.rate,
         monthlyBasic: s.basic,
-        annualHike: s.hike,
-        vpfPct: s.vpf,
+        vpfPct: 0,
         capWageAtCeiling: s.cap,
         epsMember: s.eps,
         dob,
@@ -72,37 +68,37 @@ export function EpfCalculator() {
         retireAge: EPF_INTEREST_END_AGE,
         taxSlab: slab,
       }),
-    [s.rate, s.basic, s.hike, s.vpf, s.cap, s.eps, dob, start, slab],
+    [s.rate, s.basic, s.cap, s.eps, dob, start, slab],
   );
 
   const chartData = useMemo(
     () =>
       result.rows.map((row) => ({
         year: row.year,
-        taxFree: adjust(row.taxFreeBalance, yearsAhead(row)),
-        taxable: adjust(row.taxableBalance, yearsAhead(row)),
-        pension: adjust(row.pensionCorpus, yearsAhead(row)),
+        taxFree: row.taxFreeBalance,
+        taxable: row.taxableBalance,
       })),
-    [result.rows, adjust],
+    [result.rows],
   );
 
+  // Salary and contributions are the actual rupees paid in each year, so they never deflate in Real view.
   const columns = useMemo<YearColumn<EpfYearRow>[]>(
     () => [
       { key: "fy", label: "FY", value: (r) => r.fy, format: "text" },
       { key: "months", label: "Months", value: (r) => r.monthsInYear, format: "int" },
       { key: "rate", label: "Rate", value: (r) => r.rate, format: "pct" },
-      { key: "basic", label: "Basic + DA /mo", value: (r) => adjust(r.monthlyBasic, yearsAhead(r)), format: "inr" },
-      { key: "employee", label: "Employee 12%", value: (r) => adjust(r.employeeContribution, yearsAhead(r)), format: "inr" },
-      { key: "vpf", label: "VPF", value: (r) => adjust(r.vpfContribution, yearsAhead(r)), format: "inr" },
-      { key: "employer", label: "Employer → EPF", value: (r) => adjust(r.employerEpfContribution, yearsAhead(r)), format: "inr" },
-      { key: "eps", label: "Employer → EPS", value: (r) => adjust(r.epsContribution, yearsAhead(r)), format: "inr" },
-      { key: "taxableContrib", label: "Above ₹2.5L", value: (r) => adjust(r.taxableContribution, yearsAhead(r)), format: "inr", tone: (r) => (r.taxableContribution > 0 ? "negative" : undefined) },
-      { key: "interest", label: "Interest", value: (r) => adjust(r.interest, yearsAhead(r)), format: "inr", tone: () => "positive" },
-      { key: "tax", label: "Tax on interest", value: (r) => adjust(r.taxOnInterest, yearsAhead(r)), format: "inr", tone: (r) => (r.taxOnInterest > 0 ? "negative" : undefined) },
-      { key: "epf", label: "EPF balance", value: (r) => adjust(r.epfBalance, yearsAhead(r)), format: "inr", strong: true },
-      { key: "pension", label: "EPS pool", value: (r) => adjust(r.pensionCorpus, yearsAhead(r)), format: "inr" },
+      { key: "basic", label: "Basic + DA /mo", value: (r) => r.monthlyBasic, format: "inr" },
+      { key: "employee", label: "Employee 12%", value: (r) => r.employeeContribution, format: "inr" },
+      { key: "employer", label: "Employer → EPF", value: (r) => r.employerEpfContribution, format: "inr" },
+      { key: "eps", label: "Employer → EPS", value: (r) => r.epsContribution, format: "inr" },
+      { key: "taxableContrib", label: "Above ₹2.5L", value: (r) => r.taxableContribution, format: "inr", tone: (r) => (r.taxableContribution > 0 ? "negative" : undefined) },
+      { key: "interest", label: "Interest", value: (r) => r.interest, format: "inr", tone: () => "positive" },
+      { key: "tax", label: "Tax on interest", value: (r) => r.taxOnInterest, format: "inr", tone: (r) => (r.taxOnInterest > 0 ? "negative" : undefined) },
+      { key: "epf", label: "EPF balance", value: (r) => r.epfBalance, format: "inr", strong: true },
+      { key: "pension", label: "EPS pool", value: (r) => r.pensionCorpus, format: "inr" },
+      ...(isReal ? [{ key: "real", label: "EPF balance (today's ₹)", value: (r: EpfYearRow) => adjust(r.epfBalance, yearsAhead(r)), format: "inr" as const }] : []),
     ],
-    [adjust],
+    [adjust, isReal],
   );
 
   const monthColumns = useMemo<YearColumn<EpfMonthRow>[]>(
@@ -111,7 +107,6 @@ export function EpfCalculator() {
       { key: "basic", label: "Basic + DA", value: (m) => m.basic, format: "inr" },
       { key: "ceiling", label: "Wage ceiling", value: (m) => m.ceiling, format: "inr" },
       { key: "employee", label: "Employee 12%", value: (m) => m.employee, format: "inr", sum: true },
-      { key: "vpf", label: "VPF", value: (m) => m.vpf, format: "inr", sum: true },
       { key: "employer", label: "Employer → EPF", value: (m) => m.employerEpf, format: "inr", sum: true },
       { key: "eps", label: "Employer → EPS", value: (m) => m.eps, format: "inr", sum: true },
       { key: "accrued", label: "Interest accrued", value: (m) => m.interestAccrued, format: "inr", sum: true, tone: () => "positive" },
@@ -134,7 +129,7 @@ export function EpfCalculator() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="EPF + VPF"
+        title="EPF"
         description={`Month-by-month from ${firstMonthLabel} until you turn ${EPF_INTEREST_END_AGE}. Interest is accrued monthly at rate ÷ 12 on the running balance and credited each 31 March. The wage ceiling was ${formatINR(EPF_WAGE_CEILING_OLD)} until 16 Sep 2026 and is ${formatINR(EPF_WAGE_CEILING)} from 17 Sep 2026.`}
         badges={[hasContributions ? durationLabel(result.contributionMonths) : "No contributions", s.cap ? "Wage capped at ceiling" : "Uncapped wage"]}
         onReset={reset}
@@ -142,18 +137,18 @@ export function EpfCalculator() {
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <KpiCard
-          label={isReal ? `EPF corpus at ${EPF_INTEREST_END_AGE} (today's ₹)` : `EPF corpus at ${EPF_INTEREST_END_AGE}`}
-          value={<Money value={adjust(result.finalEpfBalance, finalYears)} />}
-          hint={<span className="num">{formatINR(adjust(result.finalEpfBalance, finalYears))}</span>}
+          label={`EPF corpus at ${EPF_INTEREST_END_AGE}`}
+          value={<Money value={result.finalEpfBalance} />}
+          hint={<span className="num">{isReal ? `Worth ${formatINR(adjust(result.finalEpfBalance, finalYears))} in today's money` : formatINR(result.finalEpfBalance)}</span>}
           icon={BriefcaseBusiness}
         />
         <KpiCard
           label="Tax-free vs taxable"
           value={
             <span className="flex items-baseline gap-1.5">
-              <Money value={adjust(result.finalTaxFreeBalance, finalYears)} />
+              <Money value={result.finalTaxFreeBalance} />
               <span className="text-sm text-muted-foreground">/</span>
-              <Money value={adjust(result.finalTaxableBalance, finalYears)} className="text-base text-negative" />
+              <Money value={result.finalTaxableBalance} className="text-base text-negative" />
             </span>
           }
           hint={`Interest on employee money above ${formatCompactINR(EPF_TAX_FREE_EMPLOYEE_LIMIT)}/yr is taxed at slab`}
@@ -229,8 +224,6 @@ export function EpfCalculator() {
                 onChange={(v) => set("basic", v)}
                 info="Set this to your real Basic + DA. Take it from your salary slip. With the wage cap on, anything above the ceiling does not change your PF."
               />
-              <SliderField id="epf-hike" label="Annual salary hike (each April)" value={s.hike} min={0} max={0.15} step={0.005} format={(v) => formatPct(v, 1)} onChange={(v) => set("hike", v)} />
-              <SliderField id="epf-vpf" label="VPF (% of Basic + DA)" value={s.vpf} min={0} max={0.5} step={0.01} format={(v) => formatPct(v, 0)} onChange={(v) => set("vpf", v)} info="Voluntary Provident Fund. 100% goes to your EPF account and earns the EPF rate. The employer does not match it." />
               <SwitchField
                 id="epf-cap"
                 label="Contribute on the wage ceiling"
@@ -262,7 +255,6 @@ export function EpfCalculator() {
                     {[
                       ["PF wage", split.pfWage, true],
                       ["Employee 12% → EPF", split.employee, false],
-                      ["VPF → EPF", split.vpf, false],
                       ["Employer 12% total", split.employerTotal, true],
                       ["  ↳ EPS", split.eps, false],
                       ["  ↳ Employer → EPF", split.employerEpf, false],
@@ -274,7 +266,7 @@ export function EpfCalculator() {
                     ))}
                     <div className="flex justify-between gap-3 border-t pt-1.5">
                       <dt className="font-medium">Into EPF each month</dt>
-                      <dd className="font-semibold">{formatINR(split.employee + split.vpf + split.employerEpf)}</dd>
+                      <dd className="font-semibold">{formatINR(split.employee + split.employerEpf)}</dd>
                     </div>
                     <div className="flex justify-between gap-3 text-muted-foreground">
                       <dt>Total PF deduction (you + employer)</dt>
@@ -289,7 +281,7 @@ export function EpfCalculator() {
         </div>
 
         <div className="min-w-0 space-y-4">
-          <SectionCard title="Balance by bucket" description={isReal ? "Inflation-adjusted to today's rupees" : "Nominal rupees on 31 March"} expandable>
+          <SectionCard title="Balance by bucket" description="Actual rupees on 31 March" expandable>
             <WealthChart data={chartData} xKey="year" series={SERIES} kind="area" stacked xTickFormatter={(v) => rows[Number(v) - 1]?.fy.replace("FY", "") ?? `Y${v}`} tooltipLabel={(v) => rows[Number(v) - 1]?.fy ?? `Year ${v}`} />
           </SectionCard>
 
@@ -317,8 +309,8 @@ export function EpfCalculator() {
 
           {breachRow ? (
             <Callout icon={AlertTriangle} title={`₹2.5L employee-contribution limit crossed in ${breachRow.fy}`} tone="negative">
-              In {breachRow.fy}, employee contributions (EPF + VPF) reach{" "}
-              <span className="num text-foreground">{formatINR(breachRow.employeeContribution + breachRow.vpfContribution)}</span>. The excess goes to a separate taxable account. Its interest is taxed every year at your {Math.round(slab * 100)}% slab (Sec 10(12) proviso and Rule 9D).
+              In {breachRow.fy}, employee contributions reach{" "}
+              <span className="num text-foreground">{formatINR(breachRow.employeeContribution)}</span>. The excess goes to a separate taxable account. Its interest is taxed every year at your {Math.round(slab * 100)}% slab (Sec 10(12) proviso and Rule 9D).
             </Callout>
           ) : (
             <Callout icon={Receipt} title="Entire corpus is tax-free" tone="positive">

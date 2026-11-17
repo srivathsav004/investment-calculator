@@ -27,10 +27,8 @@ export const EPS_PENSION_DIVISOR = 70;
 export interface EpfInput {
   /** Rate for years EPFO hasn't declared yet (FY2025-26 always uses the declared 8.25%). */
   rate: number;
-  /** Basic + DA per month when the UAN started. */
+  /** Basic + DA per month, held flat for the whole timeline. */
   monthlyBasic: number;
-  /** Annual hike applied every April after the start month. */
-  annualHike: number;
   vpfPct: number;
   capWageAtCeiling: boolean;
   /** Member of EPS-95. False when wages exceeded the ceiling at joining — the full 12% then goes to EPF. */
@@ -321,7 +319,7 @@ export function simulateEpf(input: EpfInput): EpfResult {
     let basicNow = 0;
 
     while (!isPastEnd() && fyStartOf(year, month) === fyStart && contributionMonths < 1200) {
-      const basic = Math.round(input.monthlyBasic * Math.pow(1 + input.annualHike, fyStart - startFy));
+      const basic = input.monthlyBasic;
       basicNow = basic;
       const info = ceilingFor(year, month);
       const split = blendedSplit(basic, input, info);
