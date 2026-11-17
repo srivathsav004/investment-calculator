@@ -75,32 +75,33 @@ export function PpfCalculator() {
     [s.rate, annualDeposit, depositMode, s.ext, s.blocks, s.wd],
   );
 
-  const chartData = useMemo(
+  // Everything is in actual rupees. Real view only adds what the balance would buy in today's money.
+  const growth = useMemo(
     () =>
       result.rows.map((row) => {
-        const netDeposits = Math.max(0, Math.min(row.closing, row.cumulativeDeposits - row.cumulativeWithdrawals));
-        return {
-          year: row.year,
-          principal: adjust(netDeposits, row.year),
-          interest: adjust(row.closing - netDeposits, row.year),
-        };
+        const netIn = Math.max(0, Math.min(row.closing, row.cumulativeDeposits - row.cumulativeWithdrawals));
+        return { year: row.year, netIn, interest: row.closing - netIn, real: adjust(row.closing, row.year) };
       }),
     [result.rows, adjust],
   );
+
+  const chartData = useMemo(() => growth.map((g) => ({ year: g.year, principal: g.netIn, interest: g.interest })), [growth]);
 
   const columns = useMemo<YearColumn<PpfYearRow>[]>(
     () => [
       { key: "year", label: "Year", value: (r) => r.year, format: "int" },
       { key: "fy", label: "FY", value: (r) => fyLabel(r.year), format: "text" },
       { key: "phase", label: "Phase", value: (r) => r.phase, format: "text" },
-      { key: "opening", label: "Opening", value: (r) => adjust(r.opening, r.year - 1), format: "inr" },
-      // Deposits and withdrawals are the actual rupees moved that year, so they never deflate in Real view.
+      { key: "opening", label: "Opening", value: (r) => r.opening, format: "inr" },
       { key: "withdrawal", label: "Withdrawal", value: (r) => r.withdrawal, format: "inr", tone: (r) => (r.withdrawal > 0 ? "negative" : undefined) },
       { key: "deposit", label: "Deposit", value: (r) => r.deposit, format: "inr" },
-      { key: "interest", label: "Interest (31 Mar)", value: (r) => adjust(r.interest, r.year), format: "inr", tone: () => "positive" },
-      { key: "closing", label: "Closing balance", value: (r) => adjust(r.closing, r.year), format: "inr", strong: true },
+      { key: "interest", label: "Interest (31 Mar)", value: (r) => r.interest, format: "inr", tone: () => "positive" },
+      { key: "closing", label: "Closing balance", value: (r) => r.closing, format: "inr", strong: true },
+      { key: "netIn", label: "Deposited so far (net)", value: (r) => growth[r.year - 1]?.netIn ?? 0, format: "inr" },
+      { key: "intToDate", label: "Interest so far", value: (r) => growth[r.year - 1]?.interest ?? 0, format: "inr", tone: () => "positive" },
+      ...(isReal ? [{ key: "real", label: "Closing balance (today's ₹)", value: (r: PpfYearRow) => growth[r.year - 1]?.real ?? 0, format: "inr" as const }] : []),
     ],
-    [adjust],
+    [growth, isReal],
   );
 
   const monthColumns = useMemo<YearColumn<PpfMonthRow>[]>(
@@ -120,7 +121,9 @@ export function PpfCalculator() {
   const effectiveYield = ppfFirstYearEffectiveYield(s.rate, depositMode);
   const bestYield = ppfFirstYearEffectiveYield(s.rate, "lumpBefore5");
   const extended = s.ext !== "stop";
-  const maturity = adjust(result.maturityValue, result.totalYears);
+  const maturity = result.maturityValue;
+  const maturityToday = adjust(result.maturityValue, result.totalYears);
+  const interestTotal = result.totalInterest;
 
   return (
     <div className="space-y-6">
@@ -133,15 +136,15 @@ export function PpfCalculator() {
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <KpiCard
-          label={isReal ? "Maturity value (today's ₹)" : "Maturity value"}
+          label="Maturity value"
           value={<Money value={maturity} />}
-          hint={<span className="num">{formatINR(maturity)}</span>}
+          hint={<span className="num">{isReal ? `Worth ${formatINR(maturityToday)} in today's money` : formatINR(maturity)}</span>}
           icon={Landmark}
         />
         <KpiCard label="Total deposited" value={<Money value={result.totalDeposits} />} hint={`${monthly ? `${formatINR(s.mdep)}/mo = ` : ""}${formatCompactINR(annualDeposit)}/yr × ${extended && s.ext === "extendWithContrib" ? result.totalYears : 15} yrs`} icon={PiggyBank} />
         <KpiCard
           label="Interest earned"
-          value={<Money value={result.totalInterest} />}
+          value={<Money value={interestTotal} />}
           tone="positive"
           hint={result.totalWithdrawals > 0 ? `Withdrawn ${formatCompactINR(result.totalWithdrawals)} in extension` : "Fully tax-free under Sec 10(11)"}
           icon={Coins}
@@ -252,7 +255,7 @@ export function PpfCalculator() {
         </SectionCard>
 
         <div className="min-w-0 space-y-4">
-          <SectionCard title="Corpus growth" description={isReal ? "Inflation-adjusted to today's rupees" : "Nominal rupees, balance on 31 March"} expandable>
+          <SectionCard title="Corpus growth" description={isReal ? "Actual rupees: what you deposit + the interest it earns = the closing balance. Real view only adds today's-money values to the cards and table" : "Nominal rupees, balance on 31 March"} expandable>
             <WealthChart
               data={chartData}
               xKey="year"
@@ -283,7 +286,7 @@ export function PpfCalculator() {
             highlight={(r) => r.year === 15}
             detailTitle={(r) => `Year ${r.year} · ${fyLabel(r.year)} · month by month`}
             detailDescription={(r) =>
-              `${r.phase} · interest accrues monthly on the lowest balance between the 5th and month-end, then is credited on 31 March. Actual rupees${isReal ? ", not inflation-adjusted" : ""}.`
+              `${r.phase} · interest accrues monthly on the lowest balance between the 5th and month-end, then is credited on 31 March. Actual rupees.`
             }
             renderDetail={(r) => (
               <MonthTable
