@@ -8,12 +8,14 @@ import { SECTION_80TTA_LIMIT } from "@/lib/tax";
 import { IDFC_DEFAULT_SLABS, analyseCrossover, blendedRate, simulateIdfc } from "@/lib/engines/idfcEngine";
 import { SWEEP_DEFAULT_FD_RATE, SWEEP_DEFAULT_SAVINGS_RATE, simulateSweep } from "@/lib/engines/sweepEngine";
 import { useGlobalSettings } from "@/components/providers/GlobalSettingsProvider";
+import { ResultsLayout } from "@/components/common/ResultsLayout";
 import { Callout, KpiCard, Money, PageHeader, SectionCard } from "@/components/common/display";
 import { Segmented, SliderField } from "@/components/common/fields";
 import { WealthChart, type ChartMarker, type ChartSeries } from "@/components/charts/WealthChart";
 import { YearTable, type YearColumn } from "@/components/ledger/YearTable";
 
 const DEFAULTS = {
+  tab: "overview" as "overview" | "ledger",
   bal: 500000,
   surplus: 20000,
   wd: 0,
@@ -51,7 +53,7 @@ function slabLabel(index: number): string {
 export function IdfcVsSweepCalculator() {
   const { slab, regime, adjust, adjustRate, isReal } = useGlobalSettings();
   const [s, set, reset] = useUrlState(DEFAULTS, {
-    allowed: { thr: ["15000", "30000"] },
+    allowed: { tab: ["overview", "ledger"], thr: ["15000", "30000"] },
     bounds: { bal: [100000, 5000000], surplus: [0, 100000], wd: [0, 300000], yrs: [1, 25], fd: [0.04, 0.09], sav: [0.02, 0.04] },
   });
 
@@ -135,7 +137,7 @@ export function IdfcVsSweepCalculator() {
         onReset={reset}
       />
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2 sm:gap-3 xl:grid-cols-4">
         <KpiCard
           label="Crossover balance"
           value={crossover.crossings.length > 0 ? <Money value={crossover.crossings[0].balance} /> : "None"}
@@ -181,59 +183,78 @@ export function IdfcVsSweepCalculator() {
         </div>
       </SectionCard>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[340px_minmax(0,1fr)]">
-        <div className="space-y-4">
-          <SectionCard title="Head-to-head inputs" description="The same cashflows go into both products.">
-            <div className="space-y-6">
-              <SliderField id="ivs-bal" label="Starting balance" value={s.bal} min={100000} max={5000000} step={25000} format={formatINR} onChange={(v) => set("bal", v)} />
-              <SliderField id="ivs-surplus" label="Monthly surplus" value={s.surplus} min={0} max={100000} step={1000} format={formatINR} onChange={(v) => set("surplus", v)} />
-              <SliderField id="ivs-wd" label="Annual withdrawal (in Sep)" value={s.wd} min={0} max={300000} step={5000} format={formatINR} onChange={(v) => set("wd", v)} />
-              <SliderField id="ivs-yrs" label="Horizon" value={s.yrs} min={1} max={25} step={1} format={(v) => `${v} yrs`} onChange={(v) => set("yrs", v)} />
-            </div>
-          </SectionCard>
-
-          <SectionCard title="Sweep assumptions">
-            <div className="space-y-6">
-              <Segmented
-                label="Savings threshold"
-                value={s.thr}
-                options={[
-                  { value: "15000", label: "₹15,000" },
-                  { value: "30000", label: "₹30,000" },
-                ]}
-                onChange={(v) => set("thr", v)}
-              />
-              <SliderField id="ivs-fd" label="Swept FD rate" value={s.fd} min={0.04} max={0.09} step={0.0005} format={(v) => formatPct(v)} onChange={(v) => set("fd", v)} />
-              <SliderField id="ivs-sav" label="Savings rate" value={s.sav} min={0.02} max={0.04} step={0.0025} format={(v) => formatPct(v)} onChange={(v) => set("sav", v)} />
-            </div>
-          </SectionCard>
-
-          <SectionCard title="IDFC progressive slabs" description="Each slab rate applies only to the part of the balance inside it.">
-            <dl className="num space-y-2 text-sm">
-              {IDFC_DEFAULT_SLABS.map((slabRow, index) => (
-                <div key={index} className="flex justify-between gap-3">
-                  <dt className="text-muted-foreground">{slabLabel(index)}</dt>
-                  <dd className="font-medium">{formatPct(slabRow.rate)}</dd>
-                </div>
-              ))}
-              <div className="flex justify-between gap-3 border-t pt-2 text-xs">
-                <dt className="text-muted-foreground">80TTA (Old Regime)</dt>
-                <dd>up to {formatINR(SECTION_80TTA_LIMIT)}</dd>
+      <ResultsLayout
+        value={s.tab}
+        onValueChange={(value) => set("tab", value as typeof s.tab)}
+        inputs={
+          <>
+            <SectionCard title="Head-to-head inputs" description="The same cashflows go into both products.">
+              <div className="space-y-6">
+                <SliderField id="ivs-bal" label="Starting balance" value={s.bal} min={100000} max={5000000} step={25000} format={formatINR} onChange={(v) => set("bal", v)} />
+                <SliderField id="ivs-surplus" label="Monthly surplus" value={s.surplus} min={0} max={100000} step={1000} format={formatINR} onChange={(v) => set("surplus", v)} />
+                <SliderField id="ivs-wd" label="Annual withdrawal (in Sep)" value={s.wd} min={0} max={300000} step={5000} format={formatINR} onChange={(v) => set("wd", v)} />
+                <SliderField id="ivs-yrs" label="Horizon" value={s.yrs} min={1} max={25} step={1} format={(v) => `${v} yrs`} onChange={(v) => set("yrs", v)} />
               </div>
-            </dl>
-          </SectionCard>
-        </div>
+            </SectionCard>
 
-        <div className="min-w-0 space-y-4">
-          <SectionCard title="Post-tax balance projection" description={isReal ? "Inflation-adjusted to today's rupees" : "Nominal rupees on 31 March"} expandable>
-            <WealthChart data={balanceData} xKey="year" series={SERIES} kind="line" xTickFormatter={(v) => `Y${v}`} tooltipLabel={(v) => `Year ${v} · ${fyLabel(Number(v))}`} />
-          </SectionCard>
-          <Callout icon={Scale} title="How the comparison is modelled">
-            IDFC interest uses actual days per month ÷ 365. The sweep moves money into FDs in ₹5,000 units as soon as it&apos;s credited. Tax for both is debited from the account on 31 March.
-          </Callout>
-          <YearTable rows={projection.rows} columns={columns} fileName={`idfc-vs-sweep-${s.yrs}y`} rowKey={(r) => r.year} />
-        </div>
-      </div>
+            <SectionCard title="Sweep assumptions">
+              <div className="space-y-6">
+                <Segmented
+                  label="Savings threshold"
+                  value={s.thr}
+                  options={[
+                    { value: "15000", label: "₹15,000" },
+                    { value: "30000", label: "₹30,000" },
+                  ]}
+                  onChange={(v) => set("thr", v)}
+                />
+                <SliderField id="ivs-fd" label="Swept FD rate" value={s.fd} min={0.04} max={0.09} step={0.0005} format={(v) => formatPct(v)} onChange={(v) => set("fd", v)} />
+                <SliderField id="ivs-sav" label="Savings rate" value={s.sav} min={0.02} max={0.04} step={0.0025} format={(v) => formatPct(v)} onChange={(v) => set("sav", v)} />
+              </div>
+            </SectionCard>
+
+            <SectionCard title="IDFC progressive slabs" description="Each slab rate applies only to the part of the balance inside it.">
+              <dl className="num space-y-2 text-sm">
+                {IDFC_DEFAULT_SLABS.map((slabRow, index) => (
+                  <div key={index} className="flex justify-between gap-3">
+                    <dt className="text-muted-foreground">{slabLabel(index)}</dt>
+                    <dd className="font-medium">{formatPct(slabRow.rate)}</dd>
+                  </div>
+                ))}
+                <div className="flex justify-between gap-3 border-t pt-2 text-xs">
+                  <dt className="text-muted-foreground">80TTA (Old Regime)</dt>
+                  <dd>up to {formatINR(SECTION_80TTA_LIMIT)}</dd>
+                </div>
+              </dl>
+            </SectionCard>
+          </>
+        }
+        tabs={[
+          {
+            value: "overview",
+            label: "Overview",
+            content: (
+              <>
+                <SectionCard title="Post-tax balance projection" description={isReal ? "Inflation-adjusted to today's rupees" : "Nominal rupees on 31 March"} expandable>
+                  <WealthChart data={balanceData} xKey="year" series={SERIES} kind="line" xTickFormatter={(v) => `Y${v}`} tooltipLabel={(v) => `Year ${v} · ${fyLabel(Number(v))}`} />
+                </SectionCard>
+                <Callout icon={Scale} title="How the comparison is modelled">
+                  IDFC interest uses actual days per month ÷ 365. The sweep moves money into FDs in ₹5,000 units as soon as it&apos;s credited. Tax for both is debited from the account on 31 March.
+                </Callout>
+              </>
+            ),
+          },
+          {
+            value: "ledger",
+            label: "Year-wise ledger",
+            content: (
+              <>
+                <YearTable rows={projection.rows} columns={columns} fileName={`idfc-vs-sweep-${s.yrs}y`} rowKey={(r) => r.year} />
+              </>
+            ),
+          },
+        ]}
+      />
     </div>
   );
 }
