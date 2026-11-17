@@ -1,7 +1,8 @@
 import { section80TTA, type TaxRegime } from "@/lib/tax";
 
 export const SWEEP_UNIT = 5_000;
-export const SWEEP_TDS_THRESHOLD = 40_000;
+/** Bank FD interest TDS threshold per bank per FY for under-60s: ₹50,000 since FY2025-26 (was ₹40,000). */
+export const SWEEP_TDS_THRESHOLD = 50_000;
 export const SWEEP_TDS_RATE = 0.1;
 /** Premature-break penalty: the broken portion earns (FD rate − 1%) for the period it was held. */
 export const SWEEP_BREAK_PENALTY = 0.01;
