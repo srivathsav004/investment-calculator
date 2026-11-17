@@ -7,10 +7,12 @@ Fixed-income and provident-fund simulator for Indian investors. Built with Next.
 | `/` | Portfolio overview: every asset fed the same SIP and ranked by post-tax XIRR |
 | `/ppf` | PPF: yearly lump sum or monthly deposits, 5th-of-month interest, four deposit-timing modes, Form H extensions |
 | `/epf` | EPF: month-by-month from your UAN start to age 58, ₹15k → ₹25k wage ceiling (17 Sep 2026), EPS cap, ₹2.5L taxable-interest bucket, EPS pension estimate |
-| `/auto-sweep` | ICICI Money Multiplier: ₹5k sweep units, LIFO reverse sweep, 1% break penalty, TDS |
+| `/auto-sweep` | ICICI Money Multiplier: ₹5k sweep units, LIFO reverse sweep, 1% break penalty, TDS (₹50k threshold), target corpus (invest until a lump sum, then stop or continue), withdrawal-habit comparison, and a "Ways to cut tax" tab |
 | `/idfc-vs-sweep` | IDFC progressive slabs vs sweep, with the exact post-tax crossover balance |
 
 The top bar holds the tax slab (0/10/20/30%), the regime (New/Old, which drives 80TTA), Nominal vs Real ₹, and the CPI assumption. These settings apply on every route. Every input is mirrored into the URL, so any scenario can be bookmarked or shared. Every chart and ledger has an Expand button for a full-screen popup, and clicking a ledger row opens its month-by-month breakdown.
+
+All calculators show actual rupees in every table and chart; Real view adds a today's-money figure (card hint and an extra ledger column) instead of replacing them. Slider values can be typed (`3,00,000`, `5L`, `1cr`, `7.1%`), results sit in tabs (Overview, Year-wise ledger, and on Auto-Sweep Withdrawal habits and Ways to cut tax), "Hide inputs" gives ledgers the full width, and "Copy link" shares the exact scenario.
 
 ## Setup from scratch
 
