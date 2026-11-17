@@ -159,6 +159,7 @@ export function IdfcVsSweepCalculator() {
       <SectionCard
         title="Post-tax one-year yield vs balance"
         description={`Static balance held for a full year, no top-ups. ${isReal ? "Shown as real (inflation-adjusted) yields." : "Nominal yields after tax at slab."}`}
+        expandable
       >
         <WealthChart
           data={yieldData}
@@ -224,7 +225,7 @@ export function IdfcVsSweepCalculator() {
         </div>
 
         <div className="min-w-0 space-y-4">
-          <SectionCard title="Post-tax balance projection" description={isReal ? "Inflation-adjusted to today's rupees" : "Nominal rupees on 31 March"}>
+          <SectionCard title="Post-tax balance projection" description={isReal ? "Inflation-adjusted to today's rupees" : "Nominal rupees on 31 March"} expandable>
             <WealthChart data={balanceData} xKey="year" series={SERIES} kind="line" xTickFormatter={(v) => `Y${v}`} tooltipLabel={(v) => `Year ${v} · ${fyLabel(Number(v))}`} />
           </SectionCard>
           <Callout icon={Scale} title="How the comparison is modelled">
