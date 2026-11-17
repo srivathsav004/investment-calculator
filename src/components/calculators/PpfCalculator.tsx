@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import { CalendarClock, Coins, Landmark, Percent, PiggyBank, ShieldCheck } from "lucide-react";
 import { useUrlState } from "@/lib/url-state";
-import { formatCompactINR, formatINR, formatPct, fyLabel } from "@/lib/formatters";
+import { FY_MONTH_NAMES, formatCompactINR, formatINR, formatPct, fyLabel } from "@/lib/formatters";
 import { preTaxEquivalent } from "@/lib/tax";
 import {
   PPF_DEPOSIT_MODE_LABELS,
@@ -14,24 +14,30 @@ import {
   simulatePpf,
   type PpfDepositMode,
   type PpfExtensionMode,
+  type PpfMonthRow,
   type PpfYearRow,
 } from "@/lib/engines/ppfEngine";
 import { useGlobalSettings } from "@/components/providers/GlobalSettingsProvider";
 import { Callout, KpiCard, Money, PageHeader, SectionCard } from "@/components/common/display";
-import { SelectField, SliderField } from "@/components/common/fields";
+import { Segmented, SelectField, SliderField } from "@/components/common/fields";
 import { WealthChart, type ChartSeries } from "@/components/charts/WealthChart";
-import { YearTable, type YearColumn } from "@/components/ledger/YearTable";
+import { MonthTable, YearTable, type YearColumn } from "@/components/ledger/YearTable";
 
 const DEFAULTS = {
   rate: 0.071,
+  freq: "yearly" as "yearly" | "monthly",
   dep: 150000,
+  mdep: 12500,
   mode: "lumpBefore5" as PpfDepositMode,
   ext: "stop" as PpfExtensionMode,
   blocks: 1,
   wd: 0,
 };
 
-const DEPOSIT_MODES = Object.entries(PPF_DEPOSIT_MODE_LABELS).map(([value, label]) => ({ value: value as PpfDepositMode, label }));
+const lumpModes: PpfDepositMode[] = ["lumpBefore5", "lumpAfter5"];
+const sipModes: PpfDepositMode[] = ["sipBefore5", "sipAfter5"];
+const modeOptions = (modes: PpfDepositMode[]) => modes.map((value) => ({ value, label: PPF_DEPOSIT_MODE_LABELS[value] }));
+const PPF_MAX_MONTHLY_DEPOSIT = PPF_MAX_ANNUAL_DEPOSIT / 12;
 const EXTENSION_MODES = Object.entries(PPF_EXTENSION_MODE_LABELS).map(([value, label]) => ({ value: value as PpfExtensionMode, label }));
 
 const SERIES: ChartSeries[] = [
@@ -43,20 +49,30 @@ export function PpfCalculator() {
   const { slab, adjust, adjustRate, isReal } = useGlobalSettings();
   const [s, set, reset] = useUrlState(DEFAULTS, {
     allowed: { mode: Object.keys(PPF_DEPOSIT_MODE_LABELS) as PpfDepositMode[], ext: Object.keys(PPF_EXTENSION_MODE_LABELS) as PpfExtensionMode[] },
-    bounds: { rate: [0.06, 0.09], dep: [PPF_MIN_ANNUAL_DEPOSIT, PPF_MAX_ANNUAL_DEPOSIT], blocks: [1, 4], wd: [0, 1] },
+    bounds: { rate: [0.06, 0.09], dep: [PPF_MIN_ANNUAL_DEPOSIT, PPF_MAX_ANNUAL_DEPOSIT], mdep: [PPF_MIN_ANNUAL_DEPOSIT, PPF_MAX_MONTHLY_DEPOSIT], blocks: [1, 4], wd: [0, 1] },
   });
+  const monthly = s.freq === "monthly";
+  const annualDeposit = monthly ? s.mdep * 12 : s.dep;
+  const timingModes = monthly ? sipModes : lumpModes;
+  // A saved URL could pair "monthly" with a lump-sum timing (or vice versa); treat it as the matching mode.
+  const depositMode: PpfDepositMode = timingModes.includes(s.mode) ? s.mode : monthly ? (s.mode === "lumpAfter5" ? "sipAfter5" : "sipBefore5") : s.mode === "sipAfter5" ? "lumpAfter5" : "lumpBefore5";
+  const setFrequency = (next: "yearly" | "monthly") => {
+    set("freq", next);
+    const after = s.mode === "lumpAfter5" || s.mode === "sipAfter5";
+    set("mode", next === "monthly" ? (after ? "sipAfter5" : "sipBefore5") : after ? "lumpAfter5" : "lumpBefore5");
+  };
 
   const result = useMemo(
     () =>
       simulatePpf({
         rate: s.rate,
-        annualDeposit: s.dep,
-        depositMode: s.mode,
+        annualDeposit,
+        depositMode,
         extensionMode: s.ext,
         extensionBlocks: s.blocks,
         annualWithdrawalPct: s.wd,
       }),
-    [s.rate, s.dep, s.mode, s.ext, s.blocks, s.wd],
+    [s.rate, annualDeposit, depositMode, s.ext, s.blocks, s.wd],
   );
 
   const chartData = useMemo(
@@ -78,16 +94,30 @@ export function PpfCalculator() {
       { key: "fy", label: "FY", value: (r) => fyLabel(r.year), format: "text" },
       { key: "phase", label: "Phase", value: (r) => r.phase, format: "text" },
       { key: "opening", label: "Opening", value: (r) => adjust(r.opening, r.year - 1), format: "inr" },
-      { key: "withdrawal", label: "Withdrawal", value: (r) => adjust(r.withdrawal, r.year - 1), format: "inr", tone: (r) => (r.withdrawal > 0 ? "negative" : undefined) },
-      { key: "deposit", label: "Deposit", value: (r) => adjust(r.deposit, r.year - 1), format: "inr" },
+      // Deposits and withdrawals are the actual rupees moved that year, so they never deflate in Real view.
+      { key: "withdrawal", label: "Withdrawal", value: (r) => r.withdrawal, format: "inr", tone: (r) => (r.withdrawal > 0 ? "negative" : undefined) },
+      { key: "deposit", label: "Deposit", value: (r) => r.deposit, format: "inr" },
       { key: "interest", label: "Interest (31 Mar)", value: (r) => adjust(r.interest, r.year), format: "inr", tone: () => "positive" },
       { key: "closing", label: "Closing balance", value: (r) => adjust(r.closing, r.year), format: "inr", strong: true },
     ],
     [adjust],
   );
 
+  const monthColumns = useMemo<YearColumn<PpfMonthRow>[]>(
+    () => [
+      { key: "month", label: "Month", value: (m) => FY_MONTH_NAMES[m.month - 1], format: "text" },
+      { key: "withdrawal", label: "Withdrawal", value: (m) => m.withdrawal, format: "inr", sum: true, tone: (m) => (m.withdrawal > 0 ? "negative" : undefined) },
+      { key: "deposit", label: "Deposit", value: (m) => m.deposit, format: "inr", sum: true },
+      { key: "eligible", label: "Interest-earning balance", value: (m) => m.eligibleBalance, format: "inr" },
+      { key: "accrued", label: "Interest accrued", value: (m) => m.interestAccrued, format: "inr", sum: true, tone: () => "positive" },
+      { key: "credited", label: "Interest credited", value: (m) => m.interestCredited, format: "inr", sum: true },
+      { key: "balance", label: "Balance (month-end)", value: (m) => m.balance, format: "inr", strong: true },
+    ],
+    [],
+  );
+
   const pretaxEquivalent = preTaxEquivalent(s.rate, slab);
-  const effectiveYield = ppfFirstYearEffectiveYield(s.rate, s.mode);
+  const effectiveYield = ppfFirstYearEffectiveYield(s.rate, depositMode);
   const bestYield = ppfFirstYearEffectiveYield(s.rate, "lumpBefore5");
   const extended = s.ext !== "stop";
   const maturity = adjust(result.maturityValue, result.totalYears);
@@ -108,7 +138,7 @@ export function PpfCalculator() {
           hint={<span className="num">{formatINR(maturity)}</span>}
           icon={Landmark}
         />
-        <KpiCard label="Total deposited" value={<Money value={result.totalDeposits} />} hint={`${formatCompactINR(s.dep)} × ${extended && s.ext === "extendWithContrib" ? result.totalYears : 15} yrs`} icon={PiggyBank} />
+        <KpiCard label="Total deposited" value={<Money value={result.totalDeposits} />} hint={`${monthly ? `${formatINR(s.mdep)}/mo = ` : ""}${formatCompactINR(annualDeposit)}/yr × ${extended && s.ext === "extendWithContrib" ? result.totalYears : 15} yrs`} icon={PiggyBank} />
         <KpiCard
           label="Interest earned"
           value={<Money value={result.totalInterest} />}
@@ -138,22 +168,46 @@ export function PpfCalculator() {
               onChange={(v) => set("rate", v)}
               info="Default 7.10%. The Ministry of Finance notifies the rate every quarter. Editable."
             />
-            <SliderField
-              id="ppf-deposit"
-              label="Annual deposit"
-              value={s.dep}
-              min={PPF_MIN_ANNUAL_DEPOSIT}
-              max={PPF_MAX_ANNUAL_DEPOSIT}
-              step={500}
-              format={formatINR}
-              onChange={(v) => set("dep", v)}
-              info="Minimum ₹500, maximum ₹1,50,000 per financial year."
+            <Segmented
+              label="How you deposit"
+              value={s.freq}
+              options={[
+                { value: "yearly", label: "Yearly lump sum" },
+                { value: "monthly", label: "Monthly" },
+              ]}
+              onChange={setFrequency}
+              info="Monthly deposits are twelve equal instalments across the financial year, so they earn a little less than one lump sum in April."
             />
+            {monthly ? (
+              <SliderField
+                id="ppf-monthly"
+                label="Monthly deposit"
+                value={s.mdep}
+                min={PPF_MIN_ANNUAL_DEPOSIT}
+                max={PPF_MAX_MONTHLY_DEPOSIT}
+                step={500}
+                format={formatINR}
+                onChange={(v) => set("mdep", v)}
+                info={`Twelve instalments a year, so at most ${formatINR(PPF_MAX_MONTHLY_DEPOSIT)} a month to stay inside the ₹1,50,000 yearly limit. That is ${formatINR(annualDeposit)} a year.`}
+              />
+            ) : (
+              <SliderField
+                id="ppf-deposit"
+                label="Annual deposit"
+                value={s.dep}
+                min={PPF_MIN_ANNUAL_DEPOSIT}
+                max={PPF_MAX_ANNUAL_DEPOSIT}
+                step={500}
+                format={formatINR}
+                onChange={(v) => set("dep", v)}
+                info="Minimum ₹500, maximum ₹1,50,000 per financial year."
+              />
+            )}
             <SelectField
               id="ppf-mode"
               label="Deposit timing"
-              value={s.mode}
-              options={DEPOSIT_MODES}
+              value={depositMode}
+              options={modeOptions(timingModes)}
               onChange={(v) => set("mode", v)}
               info="Money deposited after the 5th misses that month's interest, because interest runs on the lowest balance between the 5th and month-end."
             />
@@ -198,7 +252,7 @@ export function PpfCalculator() {
         </SectionCard>
 
         <div className="min-w-0 space-y-4">
-          <SectionCard title="Corpus growth" description={isReal ? "Inflation-adjusted to today's rupees" : "Nominal rupees, balance on 31 March"}>
+          <SectionCard title="Corpus growth" description={isReal ? "Inflation-adjusted to today's rupees" : "Nominal rupees, balance on 31 March"} expandable>
             <WealthChart
               data={chartData}
               xKey="year"
@@ -227,6 +281,26 @@ export function PpfCalculator() {
             fileName={`ppf-${result.totalYears}y-${(s.rate * 100).toFixed(2)}pct`}
             rowKey={(r) => r.year}
             highlight={(r) => r.year === 15}
+            detailTitle={(r) => `Year ${r.year} · ${fyLabel(r.year)} · month by month`}
+            detailDescription={(r) =>
+              `${r.phase} · interest accrues monthly on the lowest balance between the 5th and month-end, then is credited on 31 March. Actual rupees${isReal ? ", not inflation-adjusted" : ""}.`
+            }
+            renderDetail={(r) => (
+              <MonthTable
+                rows={r.months}
+                columns={monthColumns}
+                rowKey={(m) => m.month}
+                note={(m) =>
+                  m.month === 1 && r.withdrawal > 0
+                    ? "Withdrawal taken 1 April"
+                    : m.month === 12
+                      ? `Interest of ${formatINR(r.interest)} credited`
+                      : m.month === 1 && depositMode === "lumpAfter5"
+                        ? "Lump sum after the 5th earns no April interest"
+                        : undefined
+                }
+              />
+            )}
           />
         </div>
       </div>

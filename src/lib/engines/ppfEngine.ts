@@ -33,6 +33,20 @@ export interface PpfInput {
   annualWithdrawalPct: number;
 }
 
+export interface PpfMonthRow {
+  /** 1 = April … 12 = March. */
+  month: number;
+  withdrawal: number;
+  deposit: number;
+  /** Balance that earns interest this month (lowest between the 5th and month-end). */
+  eligibleBalance: number;
+  interestAccrued: number;
+  /** Interest credited to the account (non-zero only in March). */
+  interestCredited: number;
+  /** Account balance at month-end, after any 31 March credit. */
+  balance: number;
+}
+
 export interface PpfYearRow {
   year: number;
   phase: string;
@@ -44,6 +58,7 @@ export interface PpfYearRow {
   cumulativeDeposits: number;
   cumulativeInterest: number;
   cumulativeWithdrawals: number;
+  months: PpfMonthRow[];
 }
 
 export interface PpfResult {
@@ -71,6 +86,12 @@ function eligibleBalance(base: number, annualDeposit: number, mode: PpfDepositMo
     case "sipAfter5":
       return base + monthly * (month - 1);
   }
+}
+
+/** Deposit made in FY month m (1 = April … 12 = March). */
+function monthDeposit(annualDeposit: number, mode: PpfDepositMode, month: number): number {
+  if (mode === "sipBefore5" || mode === "sipAfter5") return annualDeposit / 12;
+  return month === 1 ? annualDeposit : 0;
 }
 
 export function simulatePpf(input: PpfInput): PpfResult {
@@ -106,11 +127,28 @@ export function simulatePpf(input: PpfInput): PpfResult {
     const base = opening - withdrawal;
     const yearDeposit = !inExtension || input.extensionMode === "extendWithContrib" ? deposit : 0;
 
+    const monthRows: PpfMonthRow[] = [];
     let interestAccrued = 0;
+    let runningBalance = base;
     for (let month = 1; month <= 12; month++) {
-      interestAccrued += eligibleBalance(base, yearDeposit, input.depositMode, month) * (input.rate / 12);
+      const eligible = eligibleBalance(base, yearDeposit, input.depositMode, month);
+      const accrued = eligible * (input.rate / 12);
+      const monthlyDeposit = monthDeposit(yearDeposit, input.depositMode, month);
+      interestAccrued += accrued;
+      runningBalance += monthlyDeposit;
+      monthRows.push({
+        month,
+        withdrawal: month === 1 ? withdrawal : 0,
+        deposit: monthlyDeposit,
+        eligibleBalance: eligible,
+        interestAccrued: accrued,
+        interestCredited: 0,
+        balance: runningBalance,
+      });
     }
     const interest = Math.round(interestAccrued);
+    monthRows[11].interestCredited = interest;
+    monthRows[11].balance += interest;
 
     balance = base + yearDeposit + interest;
     cumulativeDeposits += yearDeposit;
@@ -128,6 +166,7 @@ export function simulatePpf(input: PpfInput): PpfResult {
       cumulativeDeposits,
       cumulativeInterest,
       cumulativeWithdrawals,
+      months: monthRows,
     });
   }
 
