@@ -67,7 +67,7 @@ function monthlyIrr(monthly: number, months: number, final: number): number {
 export function PortfolioOverview() {
   const { slab, regime, adjust, adjustRate, isReal, navQuery } = useGlobalSettings();
   const [s, set, reset] = useUrlState(DEFAULTS, {
-    bounds: { sip: [1000, 100000], yrs: [1, 35], ppf: [0.06, 0.09], epf: [0.07, 0.095], fd: [0.05, 0.09] },
+    bounds: { sip: [1000, 10000000], yrs: [1, 35], ppf: [0.06, 0.09], epf: [0.07, 0.095], fd: [0.05, 0.09] },
   });
 
   const assets = useMemo<AssetResult[]>(() => {
@@ -183,7 +183,7 @@ export function PortfolioOverview() {
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[300px_minmax(0,1fr)]">
         <SectionCard title="Common inputs" description="Shared by every asset below.">
           <div className="space-y-6">
-            <SliderField id="ov-sip" label="Monthly investment" value={s.sip} min={1000} max={100000} step={500} format={formatINR} onChange={(v) => set("sip", v)} />
+            <SliderField id="ov-sip" label="Monthly investment" value={s.sip} min={1000} max={100000} step={500} typedMax={10000000} format={formatINR} onChange={(v) => set("sip", v)} />
             <SliderField id="ov-yrs" label="Horizon" value={s.yrs} min={1} max={35} step={1} format={(v) => `${v} yrs`} onChange={(v) => set("yrs", v)} />
             <SliderField id="ov-ppf" label="PPF rate" value={s.ppf} min={0.06} max={0.09} step={0.0005} format={(v) => formatPct(v)} onChange={(v) => set("ppf", v)} />
             <SliderField id="ov-epf" label="EPF / VPF rate" value={s.epf} min={0.07} max={0.095} step={0.0005} format={(v) => formatPct(v)} onChange={(v) => set("epf", v)} />
@@ -213,7 +213,7 @@ export function PortfolioOverview() {
                     <TableHead className="px-3">Liquidity</TableHead>
                     <TableHead className="px-3 text-right">Invested</TableHead>
                     <TableHead className="px-3 text-right">Corpus</TableHead>
-                    <TableHead className="px-3 text-right">Gain (nominal)</TableHead>
+                    <TableHead className="px-3 text-right">{isReal ? "Gain (today's ₹)" : "Gain (nominal)"}</TableHead>
                     <TableHead className="px-3 text-right">XIRR</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -245,7 +245,7 @@ export function PortfolioOverview() {
                           <Money value={corpus} />
                         </TableCell>
                         <TableCell className="px-3 text-right text-positive">
-                          <Money value={asset.final - asset.invested} />
+                          <Money value={isReal ? corpus - Array.from({ length: s.yrs * 12 }, (_, m) => adjust(asset.monthly, (m + 1) / 12)).reduce((a, b) => a + b, 0) : asset.final - asset.invested} />
                         </TableCell>
                         <TableCell className="num px-3 text-right font-semibold">{formatPct(adjustRate(asset.xirr))}</TableCell>
                       </TableRow>

@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Info } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Slider } from "@/components/ui/slider";
@@ -37,9 +37,39 @@ interface SliderFieldProps {
   minLabel?: string;
   maxLabel?: string;
   disabled?: boolean;
+  /** The value is a fraction shown as a percentage: typing "7.1" means 0.071. Detected from the formatted value when omitted. */
+  percent?: boolean;
+  /** Largest value that can be typed in (the slider itself stops at `max`). Defaults to `max`. */
+  typedMax?: number;
 }
 
-export function SliderField({ id, label, value, min, max, step, format, onChange, info, minLabel, maxLabel, disabled }: SliderFieldProps) {
+const AMOUNT_SUFFIX: Record<string, number> = { k: 1e3, l: 1e5, lac: 1e5, lakh: 1e5, lakhs: 1e5, cr: 1e7, crore: 1e7, crores: 1e7 };
+
+/** Parses "300000", "3,00,000", "₹3L", "2.5 lakh", "1cr" or "7.1%". Returns NaN when it isn't a number. */
+export function parseTypedNumber(text: string, percent: boolean): number {
+  const cleaned = text.replace(/[₹,%\s]/g, "").toLowerCase();
+  const match = /^(\d*\.?\d+)([a-z]*)$/.exec(cleaned);
+  if (!match) return Number.NaN;
+  const base = Number(match[1]);
+  if (!match[2]) return base;
+  if (percent || !(match[2] in AMOUNT_SUFFIX)) return Number.NaN;
+  return base * AMOUNT_SUFFIX[match[2]];
+}
+
+export function SliderField({ id, label, value, min, max, step, format, onChange, info, minLabel, maxLabel, disabled, percent: percentProp, typedMax }: SliderFieldProps) {
+  const percent = percentProp ?? format(value).includes("%");
+  const [draft, setDraft] = useState<string | null>(null);
+  const scale = percent ? 100 : 1;
+  const upper = Math.max(max, typedMax ?? max);
+
+  const commit = () => {
+    if (draft === null) return;
+    const parsed = parseTypedNumber(draft, percent);
+    setDraft(null);
+    if (!Number.isFinite(parsed)) return;
+    onChange(Math.min(Math.max(parsed / scale, min), upper));
+  };
+
   return (
     <div className={cn("space-y-2.5", disabled && "opacity-50")}>
       <div className="flex items-center justify-between gap-3">
@@ -49,11 +79,32 @@ export function SliderField({ id, label, value, min, max, step, format, onChange
           </Label>
           {info ? <InfoTip>{info}</InfoTip> : null}
         </div>
-        <span className="num rounded-md border bg-muted/40 px-2 py-0.5 text-sm font-medium">{format(value)}</span>
+        <Input
+          id={`${id}-input`}
+          type="text"
+          inputMode="decimal"
+          disabled={disabled}
+          value={draft ?? format(value)}
+          aria-label={`${label} (type a value)`}
+          onFocus={(event) => {
+            setDraft(String(Number((value * scale).toFixed(percent ? 3 : 2))));
+            event.target.select();
+          }}
+          onChange={(event) => setDraft(event.target.value)}
+          onBlur={commit}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") event.currentTarget.blur();
+            if (event.key === "Escape") {
+              setDraft(null);
+              event.currentTarget.blur();
+            }
+          }}
+          className="num h-8 w-36 px-2 text-right text-sm font-medium"
+        />
       </div>
       <Slider
         id={id}
-        value={[value]}
+        value={[Math.min(Math.max(value, min), max)]}
         min={min}
         max={max}
         step={step}
