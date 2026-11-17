@@ -26,7 +26,9 @@ import { MonthTable, YearTable, type YearColumn } from "@/components/ledger/Year
 
 const DEFAULTS = {
   init: 15000,
-  surplus: 25000,
+  surplus: 15000,
+  tgt: 300000,
+  after: 0,
   thr: "15000" as "15000" | "30000",
   fd: SWEEP_DEFAULT_FD_RATE,
   sav: SWEEP_DEFAULT_SAVINGS_RATE,
@@ -48,7 +50,7 @@ export function SweepCalculator() {
   const { slab, regime, adjust, isReal } = useGlobalSettings();
   const [s, set, reset] = useUrlState(DEFAULTS, {
     allowed: { thr: ["15000", "30000"], wdm: MONTH_OPTIONS.map((m) => m.value) },
-    bounds: { init: [0, 2500000], surplus: [0, 100000], fd: [0.04, 0.09], sav: [0.02, 0.04], wd: [0, 300000], yrs: [1, 25] },
+    bounds: { init: [0, 100000000], surplus: [0, 10000000], tgt: [0, 100000000], after: [0, 10000000], fd: [0.04, 0.09], sav: [0.02, 0.04], wd: [0, 100000000], yrs: [1, 25] },
   });
 
   const result = useMemo(
@@ -56,6 +58,8 @@ export function SweepCalculator() {
       simulateSweep({
         initialBalance: s.init,
         monthlySurplus: s.surplus,
+        targetBalance: s.tgt,
+        monthlySurplusAfterTarget: s.after,
         threshold: Number(s.thr),
         savingsRate: s.sav,
         fdRate: s.fd,
@@ -67,30 +71,31 @@ export function SweepCalculator() {
         tdsEnabled: s.tds,
         fdStartsNextMonth: s.next,
       }),
-    [s.init, s.surplus, s.thr, s.sav, s.fd, s.wd, s.wdm, s.yrs, s.tds, s.next, slab, regime],
+    [s.init, s.surplus, s.tgt, s.after, s.thr, s.sav, s.fd, s.wd, s.wdm, s.yrs, s.tds, s.next, slab, regime],
   );
 
   const chartData = useMemo(
-    () => result.rows.map((row) => ({ year: row.year, fd: adjust(row.fdBalance, row.year), savings: adjust(row.savingsBalance, row.year) })),
-    [result.rows, adjust],
+    () => result.rows.map((row) => ({ year: row.year, fd: row.fdBalance, savings: row.savingsBalance })),
+    [result.rows],
   );
 
   const columns = useMemo<YearColumn<SweepYearRow>[]>(
     () => [
       { key: "year", label: "Year", value: (r) => r.year, format: "int" },
       { key: "fy", label: "FY", value: (r) => fyLabel(r.year), format: "text" },
-      { key: "deposits", label: "Credits", value: (r) => adjust(r.deposits, r.year), format: "inr" },
-      { key: "withdrawals", label: "Withdrawn", value: (r) => adjust(r.withdrawals, r.year), format: "inr", tone: (r) => (r.withdrawals > 0 ? "negative" : undefined) },
-      { key: "broken", label: "FD principal broken", value: (r) => adjust(r.brokenPrincipal, r.year), format: "inr" },
-      { key: "savInt", label: "Savings int.", value: (r) => adjust(r.savingsInterest, r.year), format: "inr", tone: () => "positive" },
-      { key: "fdInt", label: "FD int.", value: (r) => adjust(r.fdInterest, r.year), format: "inr", tone: () => "positive" },
-      { key: "penalty", label: "Break penalty", value: (r) => adjust(r.breakPenalty, r.year), format: "inr", tone: (r) => (r.breakPenalty > 0 ? "negative" : undefined) },
-      { key: "tds", label: "TDS", value: (r) => adjust(r.tds, r.year), format: "inr" },
-      { key: "tax", label: "Total tax", value: (r) => adjust(r.tax, r.year), format: "inr", tone: (r) => (r.tax > 0 ? "negative" : undefined) },
+      { key: "deposits", label: "Credits", value: (r) => r.deposits, format: "inr" },
+      { key: "withdrawals", label: "Withdrawn", value: (r) => r.withdrawals, format: "inr", tone: (r) => (r.withdrawals > 0 ? "negative" : undefined) },
+      { key: "broken", label: "FD principal broken", value: (r) => r.brokenPrincipal, format: "inr" },
+      { key: "savInt", label: "Savings int.", value: (r) => r.savingsInterest, format: "inr", tone: () => "positive" },
+      { key: "fdInt", label: "FD int.", value: (r) => r.fdInterest, format: "inr", tone: () => "positive" },
+      { key: "penalty", label: "Break penalty", value: (r) => r.breakPenalty, format: "inr", tone: (r) => (r.breakPenalty > 0 ? "negative" : undefined) },
+      { key: "tds", label: "TDS", value: (r) => r.tds, format: "inr" },
+      { key: "tax", label: "Total tax", value: (r) => r.tax, format: "inr", tone: (r) => (r.tax > 0 ? "negative" : undefined) },
       { key: "fdCount", label: "Live FDs", value: (r) => r.fdCount, format: "int" },
-      { key: "total", label: "Total balance", value: (r) => adjust(r.total, r.year), format: "inr", strong: true },
+      { key: "total", label: "Total balance", value: (r) => r.total, format: "inr", strong: true },
+      ...(isReal ? [{ key: "real", label: "Total balance (today's ₹)", value: (r: SweepYearRow) => adjust(r.total, r.year), format: "inr" as const }] : []),
     ],
-    [adjust],
+    [adjust, isReal],
   );
 
   const scenarios = useMemo(
@@ -99,6 +104,8 @@ export function SweepCalculator() {
         {
           initialBalance: s.init,
           monthlySurplus: s.surplus,
+          targetBalance: s.tgt,
+          monthlySurplusAfterTarget: s.after,
           threshold: SWEEP_THRESHOLDS[0],
           savingsRate: s.sav,
           fdRate: s.fd,
@@ -112,7 +119,7 @@ export function SweepCalculator() {
         },
         s.wd,
       ),
-    [s.init, s.surplus, s.sav, s.fd, s.wd, s.wdm, s.yrs, s.tds, s.next, slab, regime],
+    [s.init, s.surplus, s.tgt, s.after, s.sav, s.fd, s.wd, s.wdm, s.yrs, s.tds, s.next, slab, regime],
   );
   const scenarioKeys = ["none", "occasional", "frequent"] as const;
 
@@ -150,7 +157,7 @@ export function SweepCalculator() {
       />
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <KpiCard label={isReal ? "Post-tax balance (today's ₹)" : "Post-tax balance"} value={<Money value={adjust(result.finalTotal, s.yrs)} />} hint={<span className="num">{formatINR(adjust(result.finalTotal, s.yrs))}</span>} icon={Layers} />
+        <KpiCard label="Post-tax balance" value={<Money value={result.finalTotal} />} hint={<span className="num">{isReal ? `Worth ${formatINR(adjust(result.finalTotal, s.yrs))} in today's money` : formatINR(result.finalTotal)}</span>} icon={Layers} />
         <KpiCard label="Interest (net of penalties)" value={<Money value={result.totalNetInterest} />} tone="positive" hint={`Post-tax yield, final FY: ${formatPct(lastYearYield)}`} icon={Coins} />
         <KpiCard
           label="Tax paid"
@@ -171,12 +178,28 @@ export function SweepCalculator() {
               value={s.init}
               min={0}
               max={2500000}
+              typedMax={100000000}
               step={5000}
               format={formatINR}
               onChange={(v) => set("init", v)}
               info={`Starts in savings. At or below the ${formatCompactINR(Number(s.thr))} threshold nothing sweeps, so it only earns the savings rate until a credit pushes the balance at least ${formatINR(SWEEP_UNIT)} past the threshold.`}
             />
-            <SliderField id="sw-surplus" label="Monthly surplus credited" value={s.surplus} min={0} max={100000} step={1000} format={formatINR} onChange={(v) => set("surplus", v)} />
+            <SliderField id="sw-surplus" label={s.tgt > 0 ? "Monthly investment until target" : "Monthly surplus credited"} value={s.surplus} min={0} max={100000} step={1000} typedMax={10000000} format={formatINR} onChange={(v) => set("surplus", v)} />
+            <SliderField
+              id="sw-tgt"
+              label="Target corpus (0 = no target)"
+              value={s.tgt}
+              min={0}
+              max={2000000}
+              step={25000}
+              typedMax={100000000}
+              format={formatINR}
+              onChange={(v) => set("tgt", v)}
+              info="Invest the monthly amount until savings plus swept FDs reach this total, e.g. an emergency fund. If withdrawals pull the total back below it, investing resumes until it is topped up again."
+            />
+            {s.tgt > 0 ? (
+              <SliderField id="sw-after" label="Monthly investment after target (0 = stop)" value={s.after} min={0} max={100000} step={1000} typedMax={10000000} format={formatINR} onChange={(v) => set("after", v)} />
+            ) : null}
             <Segmented
               label="Savings threshold (2.75% p.a.)"
               value={s.thr}
@@ -195,6 +218,7 @@ export function SweepCalculator() {
               value={s.wd}
               min={0}
               max={300000}
+              typedMax={100000000}
               step={5000}
               format={formatINR}
               onChange={(v) => set("wd", v)}
@@ -222,11 +246,18 @@ export function SweepCalculator() {
         </SectionCard>
 
         <div className="min-w-0 space-y-4">
-          <SectionCard title="Where the money sits" description={isReal ? "Inflation-adjusted to today's rupees, 31 March" : "Post-tax balances on 31 March"} expandable>
+          <SectionCard title="Where the money sits" description="Post-tax balances on 31 March, actual rupees" expandable>
             <WealthChart data={chartData} xKey="year" series={SERIES} kind="bar" stacked xTickFormatter={(v) => `Y${v}`} tooltipLabel={(v) => `Year ${v} · ${fyLabel(Number(v))}`} />
           </SectionCard>
 
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            {s.tgt > 0 ? (
+              <Callout icon={Layers} title="Target corpus">
+                {result.targetReachedMonth
+                  ? `${formatINR(s.tgt)} is reached in month ${result.targetReachedMonth} (${Math.floor((result.targetReachedMonth - 1) / 12)} yrs ${(result.targetReachedMonth - 1) % 12 + 1} mo). ${s.after > 0 ? `After that you invest ${formatINR(s.after)} a month.` : "After that nothing more is invested; the corpus only compounds (withdrawals are topped back up to the target)."}`
+                  : `${formatINR(s.tgt)} is not reached within ${s.yrs} years at ${formatINR(s.surplus)} a month.`}
+              </Callout>
+            ) : null}
             <Callout icon={ArrowDownUp} title="Tax treatment">
               Savings interest {regime === "old" ? "gets the 80TTA deduction (up to ₹10,000)" : "gets no 80TTA deduction under the New Regime"}. FD interest is fully taxed at your {Math.round(slab * 100)}% slab.
             </Callout>
@@ -243,7 +274,7 @@ export function SweepCalculator() {
 
           <SectionCard
             title="Which withdrawal habit are you?"
-            description={`Same surplus, rates and tax as your inputs; only the withdrawals change. Withdrawal amount: ${formatINR(s.wd)} (set it in the inputs).`}
+            description={`Same investment plan, rates and tax as your inputs; only the withdrawals change. Withdrawal amount: ${formatINR(s.wd)} (set it in the inputs).`}
             expandable
           >
             <div className="overflow-x-auto">
@@ -275,7 +306,7 @@ export function SweepCalculator() {
                         </TableCell>
                         {pair.map((o) => (
                           <TableCell key={o.threshold} className={`px-3 text-right ${o === best ? "font-semibold" : "text-muted-foreground"}`}>
-                            <Money value={adjust(o.finalTotal, s.yrs)} />
+                            <Money value={o.finalTotal} />
                           </TableCell>
                         ))}
                         <TableCell className="px-3 text-right">
@@ -288,7 +319,7 @@ export function SweepCalculator() {
                           </Badge>
                           <span className="ml-2 text-muted-foreground">
                             {gap < 0.002 * best.finalTotal ? "marginal" : "+"}
-                            {gap >= 0.002 * best.finalTotal ? formatCompactINR(adjust(gap, s.yrs)) : ""}
+                            {gap >= 0.002 * best.finalTotal ? formatCompactINR(gap) : ""}
                           </span>
                         </TableCell>
                       </TableRow>
@@ -313,7 +344,7 @@ export function SweepCalculator() {
             rowKey={(r) => r.year}
             detailTitle={(r) => `Year ${r.year} · ${fyLabel(r.year)} · month by month`}
             detailDescription={() =>
-              `Savings interest accrues monthly and is credited every quarter. Each swept FD compounds quarterly from its own start date. Actual rupees${isReal ? ", not inflation-adjusted" : ""}.`
+              `Savings interest accrues monthly and is credited every quarter. Each swept FD compounds quarterly from its own start date. Actual rupees.`
             }
             renderDetail={(r) => <MonthTable rows={r.months} columns={monthColumns} rowKey={(m) => m.month} note={(m) => m.note} />}
           />

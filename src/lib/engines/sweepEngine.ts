@@ -12,7 +12,12 @@ export const SWEEP_THRESHOLDS = [15_000, 30_000] as const;
 
 export interface SweepInput {
   initialBalance: number;
+  /** Monthly amount invested while the total balance is below `targetBalance` (or always, when there is no target). */
   monthlySurplus: number;
+  /** Corpus (e.g. an emergency fund) to build first. 0 or undefined = no target, keep investing `monthlySurplus` forever. */
+  targetBalance?: number;
+  /** Monthly amount invested once the total balance has reached the target (0 = stop investing). */
+  monthlySurplusAfterTarget?: number;
   threshold: number;
   savingsRate: number;
   fdRate: number;
@@ -76,6 +81,8 @@ export interface SweepYearRow {
 
 export interface SweepResult {
   rows: SweepYearRow[];
+  /** 1-based month in which the total balance first reached the target, if it did. */
+  targetReachedMonth?: number;
   finalTotal: number;
   totalDeposits: number;
   totalWithdrawals: number;
@@ -109,6 +116,10 @@ export function simulateSweep(input: SweepInput): SweepResult {
   const penaltyQuarterlyRate = Math.max(0, input.fdRate - SWEEP_BREAK_PENALTY) / 4;
   let savings = input.initialBalance;
   let pendingSavingsInterest = 0;
+
+  const target = input.targetBalance && input.targetBalance > 0 ? input.targetBalance : 0;
+  const afterTarget = Math.max(0, input.monthlySurplusAfterTarget ?? 0);
+  let targetReachedMonth: number | undefined;
 
   const eventsPerYear = Math.min(12, Math.max(1, Math.round(input.withdrawalsPerYear ?? 1)));
   const everyYears = Math.max(1, Math.round(input.withdrawalEveryYears ?? 1));
@@ -176,10 +187,18 @@ export function simulateSweep(input: SweepInput): SweepResult {
     for (let month = 1; month <= 12; month++) {
       const simMonth = (year - 1) * 12 + month - 1;
       const brokenBefore = acc.brokenPrincipal;
-      const monthCredit = input.monthlySurplus + (year === 1 && month === 1 ? input.initialBalance : 0);
-      savings += input.monthlySurplus;
-      deposits += input.monthlySurplus;
-      cumulativeDeposits += input.monthlySurplus;
+      // Below the target the full monthly amount goes in (capped at the gap); at or above it, the after-target amount.
+      let contribution = input.monthlySurplus;
+      let belowTarget = false;
+      if (target > 0) {
+        const gap = target - (savings + fdTotal());
+        belowTarget = gap > 0.005;
+        contribution = belowTarget ? Math.min(input.monthlySurplus, gap) : afterTarget;
+      }
+      const monthCredit = contribution + (year === 1 && month === 1 ? input.initialBalance : 0);
+      savings += contribution;
+      deposits += contribution;
+      cumulativeDeposits += contribution;
 
       let withdrawnNow = 0;
       if (year % everyYears === 0 && withdrawalMonths.has(month) && perEvent > 0) {
@@ -216,6 +235,10 @@ export function simulateSweep(input: SweepInput): SweepResult {
       if (swept > 0) notes.push(`${formatRupees(swept)} swept into FD #${fds.length}`);
       if (acc.brokenPrincipal - brokenBefore > 0.005) notes.push(`Reverse sweep broke ${formatRupees(acc.brokenPrincipal - brokenBefore)} of FD principal`);
       if (swept > 0 && input.fdStartsNextMonth) notes.push("new FD earns from next month");
+      if (target > 0 && !belowTarget && targetReachedMonth === undefined) {
+        targetReachedMonth = simMonth + 1;
+        notes.push(`Target ${formatRupees(target)} reached${afterTarget > 0 ? ` — investing ${formatRupees(afterTarget)}/mo from now` : " — investing stops"}`);
+      }
       monthRows.push({
         month,
         credited: monthCredit,
@@ -297,6 +320,7 @@ export function simulateSweep(input: SweepInput): SweepResult {
   const last = rows[rows.length - 1];
   return {
     rows,
+    targetReachedMonth,
     finalTotal: last ? last.total : input.initialBalance,
     totalDeposits: cumulativeDeposits,
     totalWithdrawals: cumulativeWithdrawals,
