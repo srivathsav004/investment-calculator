@@ -168,7 +168,7 @@ function YearTableCard<T>({
                 return (
                   <TableHead
                     key={column.key}
-                    className={cn("h-9 whitespace-nowrap px-3", column.format === "text" ? "text-left" : "text-right", index === 0 && "sticky left-0 z-10 bg-card")}
+                    className={cn("h-9 whitespace-nowrap px-2.5", column.format === "text" ? "text-left" : "text-right", index === 0 && "sticky left-0 z-10 bg-card")}
                     aria-sort={active ? (sort.dir === "asc" ? "ascending" : "descending") : "none"}
                   >
                     <button
@@ -211,7 +211,7 @@ function YearTableCard<T>({
                     <TableCell
                       key={column.key}
                       className={cn(
-                        "whitespace-nowrap px-3 py-2",
+                        "whitespace-nowrap px-2.5 py-2",
                         column.format === "text" ? "text-left" : "num text-right",
                         column.strong && "font-semibold",
                         tone === "positive" && "text-positive",
@@ -271,7 +271,7 @@ export function MonthTable<T>({ rows, columns, rowKey, note, footerLabel = "Tota
         <TableHeader className="bg-muted/40">
           <TableRow className="hover:bg-transparent">
             {columns.map((column) => (
-              <TableHead key={column.key} className={cn("h-9 whitespace-nowrap px-3 font-medium", column.format === "text" ? "text-left" : "text-right")}>
+              <TableHead key={column.key} className={cn("h-9 whitespace-nowrap px-2.5 font-medium", column.format === "text" ? "text-left" : "text-right")}>
                 {column.label}
               </TableHead>
             ))}
@@ -287,7 +287,7 @@ export function MonthTable<T>({ rows, columns, rowKey, note, footerLabel = "Tota
                   <TableCell
                     key={column.key}
                     className={cn(
-                      "whitespace-nowrap px-3 py-1.5",
+                      "whitespace-nowrap px-2.5 py-1.5",
                       column.format === "text" ? "text-left" : "num text-right",
                       column.strong && "font-semibold",
                       tone === "positive" && "text-positive",
@@ -306,7 +306,7 @@ export function MonthTable<T>({ rows, columns, rowKey, note, footerLabel = "Tota
           <tfoot className="border-t bg-muted/40 font-semibold">
             <TableRow className="hover:bg-transparent">
               {columns.map((column, index) => (
-                <TableCell key={column.key} className={cn("whitespace-nowrap px-3 py-2", column.format === "text" ? "text-left" : "num text-right")}>
+                <TableCell key={column.key} className={cn("whitespace-nowrap px-2.5 py-2", column.format === "text" ? "text-left" : "num text-right")}>
                   {column.sum ? renderCell(rows.reduce((total, row) => total + Number(column.value(row)), 0), column.format) : index === 0 ? footerLabel : ""}
                 </TableCell>
               ))}

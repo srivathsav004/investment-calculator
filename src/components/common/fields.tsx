@@ -73,7 +73,7 @@ export function SliderField({ id, label, value, min, max, step, format, onChange
   return (
     <div className={cn("space-y-2.5", disabled && "opacity-50")}>
       <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-1.5">
+        <div className="flex min-w-0 flex-1 items-center gap-1.5">
           <Label htmlFor={id} className="text-xs font-medium text-muted-foreground">
             {label}
           </Label>
@@ -87,8 +87,10 @@ export function SliderField({ id, label, value, min, max, step, format, onChange
           value={draft ?? format(value)}
           aria-label={`${label} (type a value)`}
           onFocus={(event) => {
+            const input = event.target;
             setDraft(String(Number((value * scale).toFixed(percent ? 3 : 2))));
-            event.target.select();
+            // Select after React swaps in the raw number, otherwise the re-render drops the selection.
+            requestAnimationFrame(() => input.select());
           }}
           onChange={(event) => setDraft(event.target.value)}
           onBlur={commit}
@@ -99,7 +101,7 @@ export function SliderField({ id, label, value, min, max, step, format, onChange
               event.currentTarget.blur();
             }
           }}
-          className="num h-8 w-36 px-2 text-right text-sm font-medium"
+          className="num h-8 w-32 shrink-0 px-2 text-right text-sm font-medium"
         />
       </div>
       <Slider

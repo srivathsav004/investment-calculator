@@ -2,7 +2,7 @@
 
 import { createContext, useState, type ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
-import { Maximize2, RotateCcw } from "lucide-react";
+import { Check, Link2, Maximize2, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatCompactINR, formatINR, formatINRExact } from "@/lib/formatters";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -57,7 +57,7 @@ interface KpiCardProps {
 export function KpiCard({ label, value, hint, icon: Icon, tone = "default", className }: KpiCardProps) {
   return (
     <Card className={cn("gap-0 rounded-lg py-0 shadow-none", className)}>
-      <CardContent className="flex flex-col gap-1.5 p-4">
+      <CardContent className="flex flex-col gap-1.5 p-3 sm:p-4">
         <div className="flex items-center justify-between gap-2 text-xs font-medium text-muted-foreground">
           <span className="truncate">{label}</span>
           {Icon ? <Icon className="size-3.5 shrink-0" aria-hidden /> : null}
@@ -78,6 +78,16 @@ interface PageHeaderProps {
 
 export function PageHeader({ title, description, badges = [], onReset }: PageHeaderProps) {
   const { isReal, inflation } = useGlobalSettings();
+  const [copied, setCopied] = useState(false);
+  const copyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1800);
+    } catch {
+      /* clipboard unavailable (insecure context or denied) — the URL bar still has the link */
+    }
+  };
   return (
     <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
       <div className="space-y-1.5">
@@ -97,10 +107,16 @@ export function PageHeader({ title, description, badges = [], onReset }: PageHea
         <p className="max-w-3xl text-sm text-muted-foreground">{description}</p>
       </div>
       {onReset ? (
-        <Button variant="outline" size="sm" onClick={onReset} className="self-start sm:self-auto">
-          <RotateCcw className="size-3.5" />
-          Reset
-        </Button>
+        <div className="flex items-center gap-2 self-start sm:self-auto">
+          <Button variant="outline" size="sm" onClick={copyLink} aria-live="polite">
+            {copied ? <Check className="size-3.5 text-positive" /> : <Link2 className="size-3.5" />}
+            {copied ? "Link copied" : "Copy link"}
+          </Button>
+          <Button variant="outline" size="sm" onClick={onReset}>
+            <RotateCcw className="size-3.5" />
+            Reset
+          </Button>
+        </div>
       ) : null}
     </div>
   );
