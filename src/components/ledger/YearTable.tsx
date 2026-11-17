@@ -1,12 +1,13 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { ArrowDown, ArrowUp, ArrowUpDown, Download } from "lucide-react";
+import { useMemo, useState, type ReactNode } from "react";
+import { ArrowDown, ArrowUp, ArrowUpDown, ChevronRight, Download, Maximize2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatCompactINR, formatINR, formatINRExact, formatNumber, formatPct } from "@/lib/formatters";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 export type ColumnFormat = "inr" | "inrCompact" | "pct" | "int" | "text";
 
@@ -18,6 +19,8 @@ export interface YearColumn<T> {
   /** Emphasise this column (e.g. closing balance). */
   strong?: boolean;
   tone?: (row: T) => "positive" | "negative" | undefined;
+  /** MonthTable only: add a total for this column in the footer row. */
+  sum?: boolean;
 }
 
 interface YearTableProps<T> {
@@ -28,11 +31,15 @@ interface YearTableProps<T> {
   rowKey: (row: T) => string | number;
   highlight?: (row: T) => boolean;
   maxHeight?: number;
+  /** When given, clicking a row opens a popup with this content (e.g. the month-by-month detail). */
+  renderDetail?: (row: T) => ReactNode;
+  detailTitle?: (row: T) => string;
+  detailDescription?: (row: T) => string;
 }
 
 type SortState = { key: string; dir: "asc" | "desc" } | null;
 
-function renderCell(value: number | string, format: ColumnFormat) {
+export function renderCell(value: number | string, format: ColumnFormat) {
   if (typeof value === "string" || format === "text") return String(value);
   switch (format) {
     case "inr":
@@ -57,8 +64,42 @@ function csvValue(value: number | string, format: ColumnFormat): string {
   return value.toFixed(2);
 }
 
-export function YearTable<T>({ title = "Year-wise ledger", rows, columns, fileName, rowKey, highlight, maxHeight = 480 }: YearTableProps<T>) {
+export function YearTable<T>(props: YearTableProps<T>) {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <>
+      <YearTableCard {...props} onExpand={() => setExpanded(true)} />
+      <Dialog open={expanded} onOpenChange={setExpanded}>
+        <DialogContent className="h-[calc(100dvh-2rem)] max-w-[calc(100vw-2rem)] sm:max-w-[calc(100vw-4rem)]">
+          <DialogHeader>
+            <DialogTitle>{props.title ?? "Year-wise ledger"}</DialogTitle>
+            <DialogDescription>Full-screen view{props.renderDetail ? " · click any row for its month-by-month breakdown" : ""}</DialogDescription>
+          </DialogHeader>
+          <div className="min-h-0 flex-1 p-4">
+            <YearTableCard {...props} bare maxHeight={Math.max(360, typeof window === "undefined" ? 600 : window.innerHeight - 190)} />
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+function YearTableCard<T>({
+  title = "Year-wise ledger",
+  rows,
+  columns,
+  fileName,
+  rowKey,
+  highlight,
+  maxHeight = 480,
+  renderDetail,
+  detailTitle,
+  detailDescription,
+  onExpand,
+  bare,
+}: YearTableProps<T> & { onExpand?: () => void; bare?: boolean }) {
   const [sort, setSort] = useState<SortState>(null);
+  const [selected, setSelected] = useState<T | null>(null);
 
   const sorted = useMemo(() => {
     if (!sort) return rows;
@@ -99,13 +140,23 @@ export function YearTable<T>({ title = "Year-wise ledger", rows, columns, fileNa
     <div className="overflow-hidden rounded-lg border bg-card">
       <div className="flex items-center justify-between gap-3 border-b px-4 py-2.5">
         <div>
-          <h2 className="text-sm font-semibold">{title}</h2>
-          <p className="text-xs text-muted-foreground">Click a column header to sort · hover a figure for the exact amount</p>
+          {bare ? null : <h2 className="text-sm font-semibold">{title}</h2>}
+          <p className="text-xs text-muted-foreground">
+            Click a header to sort · hover a figure for the exact amount{renderDetail ? " · click a row for its monthly detail" : ""}
+          </p>
         </div>
-        <Button variant="outline" size="sm" onClick={exportCsv}>
-          <Download className="size-3.5" />
-          CSV
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={exportCsv}>
+            <Download className="size-3.5" />
+            CSV
+          </Button>
+          {bare || !onExpand ? null : (
+            <Button variant="outline" size="sm" onClick={onExpand} aria-label="Open the ledger full screen">
+              <Maximize2 className="size-3.5" />
+              Expand
+            </Button>
+          )}
+        </div>
       </div>
       <div className="overflow-auto" style={{ maxHeight }}>
         <Table className="text-xs">
@@ -135,7 +186,22 @@ export function YearTable<T>({ title = "Year-wise ledger", rows, columns, fileNa
           </TableHeader>
           <TableBody>
             {sorted.map((row) => (
-              <TableRow key={rowKey(row)} className={cn(highlight?.(row) && "bg-muted/40")}>
+              <TableRow
+                key={rowKey(row)}
+                className={cn(highlight?.(row) && "bg-muted/40", renderDetail && "cursor-pointer")}
+                onClick={renderDetail ? () => setSelected(row) : undefined}
+                onKeyDown={
+                  renderDetail
+                    ? (event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          setSelected(row);
+                        }
+                      }
+                    : undefined
+                }
+                tabIndex={renderDetail ? 0 : undefined}
+              >
                 {columns.map((column, index) => {
                   const value = column.value(row);
                   const tone = column.tone?.(row);
@@ -153,6 +219,7 @@ export function YearTable<T>({ title = "Year-wise ledger", rows, columns, fileNa
                         index === 0 && "sticky left-0 bg-card",
                       )}
                     >
+                      {renderDetail && index === 0 ? <ChevronRight className="mr-1 inline size-3 text-muted-foreground" aria-hidden /> : null}
                       {showExact ? (
                         <Tooltip>
                           <TooltipTrigger asChild>
@@ -171,6 +238,83 @@ export function YearTable<T>({ title = "Year-wise ledger", rows, columns, fileNa
           </TableBody>
         </Table>
       </div>
+      {renderDetail ? (
+        <Dialog open={selected !== null} onOpenChange={(open) => !open && setSelected(null)}>
+          <DialogContent className="max-w-6xl">
+            <DialogHeader>
+              <DialogTitle>{selected !== null && detailTitle ? detailTitle(selected) : "Detail"}</DialogTitle>
+              <DialogDescription>{selected !== null && detailDescription ? detailDescription(selected) : "Month-by-month breakdown"}</DialogDescription>
+            </DialogHeader>
+            <div className="min-h-0 flex-1 overflow-auto p-4">{selected !== null ? renderDetail(selected) : null}</div>
+          </DialogContent>
+        </Dialog>
+      ) : null}
+    </div>
+  );
+}
+
+interface MonthTableProps<T> {
+  rows: T[];
+  columns: YearColumn<T>[];
+  rowKey: (row: T) => string | number;
+  /** Optional per-row remark (e.g. "FD created", "Ceiling split") shown beside the figures. */
+  note?: (row: T) => string | undefined;
+  footerLabel?: string;
+}
+
+/** Plain month-by-month grid used inside the row-detail popups. Columns flagged `sum` get a total. */
+export function MonthTable<T>({ rows, columns, rowKey, note, footerLabel = "Total" }: MonthTableProps<T>) {
+  const hasTotals = columns.some((c) => c.sum);
+  return (
+    <div className="overflow-auto rounded-md border">
+      <Table className="text-xs">
+        <TableHeader className="bg-muted/40">
+          <TableRow className="hover:bg-transparent">
+            {columns.map((column) => (
+              <TableHead key={column.key} className={cn("h-9 whitespace-nowrap px-3 font-medium", column.format === "text" ? "text-left" : "text-right")}>
+                {column.label}
+              </TableHead>
+            ))}
+            {note ? <TableHead className="h-9 px-3">Remark</TableHead> : null}
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {rows.map((row) => (
+            <TableRow key={rowKey(row)}>
+              {columns.map((column) => {
+                const tone = column.tone?.(row);
+                return (
+                  <TableCell
+                    key={column.key}
+                    className={cn(
+                      "whitespace-nowrap px-3 py-1.5",
+                      column.format === "text" ? "text-left" : "num text-right",
+                      column.strong && "font-semibold",
+                      tone === "positive" && "text-positive",
+                      tone === "negative" && "text-negative",
+                    )}
+                  >
+                    {renderCell(column.value(row), column.format)}
+                  </TableCell>
+                );
+              })}
+              {note ? <TableCell className="px-3 py-1.5 text-muted-foreground">{note(row) ?? ""}</TableCell> : null}
+            </TableRow>
+          ))}
+        </TableBody>
+        {hasTotals ? (
+          <tfoot className="border-t bg-muted/40 font-semibold">
+            <TableRow className="hover:bg-transparent">
+              {columns.map((column, index) => (
+                <TableCell key={column.key} className={cn("whitespace-nowrap px-3 py-2", column.format === "text" ? "text-left" : "num text-right")}>
+                  {column.sum ? renderCell(rows.reduce((total, row) => total + Number(column.value(row)), 0), column.format) : index === 0 ? footerLabel : ""}
+                </TableCell>
+              ))}
+              {note ? <TableCell /> : null}
+            </TableRow>
+          </tfoot>
+        ) : null}
+      </Table>
     </div>
   );
 }

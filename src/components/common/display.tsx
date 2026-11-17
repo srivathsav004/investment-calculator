@@ -1,8 +1,8 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { createContext, useState, type ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
-import { RotateCcw } from "lucide-react";
+import { Maximize2, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatCompactINR, formatINR, formatINRExact } from "@/lib/formatters";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -10,6 +10,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useGlobalSettings } from "@/components/providers/GlobalSettingsProvider";
 
 interface MoneyProps {
@@ -117,7 +118,22 @@ export function Callout({ icon: Icon, title, children, tone = "default" }: { ico
   );
 }
 
-export function SectionCard({ title, description, action, children, className }: { title: string; description?: string; action?: ReactNode; children: ReactNode; className?: string }) {
+/** True inside a full-screen card popup, so charts can fill the available height. */
+export const ExpandedViewContext = createContext(false);
+
+interface SectionCardProps {
+  title: string;
+  description?: string;
+  action?: ReactNode;
+  children: ReactNode;
+  className?: string;
+  /** Adds an Expand button that re-renders `expanded` (or `children`) full-screen in a popup. */
+  expandable?: boolean;
+  expanded?: ReactNode;
+}
+
+export function SectionCard({ title, description, action, children, className, expandable, expanded }: SectionCardProps) {
+  const [open, setOpen] = useState(false);
   return (
     <Card className={cn("gap-0 rounded-lg py-0 shadow-none", className)}>
       <div className="flex flex-wrap items-start justify-between gap-3 border-b px-4 py-3">
@@ -125,9 +141,29 @@ export function SectionCard({ title, description, action, children, className }:
           <h2 className="text-sm font-semibold">{title}</h2>
           {description ? <p className="mt-0.5 text-xs text-muted-foreground">{description}</p> : null}
         </div>
-        {action}
+        <div className="flex items-center gap-2">
+          {action}
+          {expandable ? (
+            <Button variant="ghost" size="icon-sm" onClick={() => setOpen(true)} aria-label={`Open ${title} full screen`}>
+              <Maximize2 className="size-3.5" />
+            </Button>
+          ) : null}
+        </div>
       </div>
       <div className="p-4">{children}</div>
+      {expandable ? (
+        <Dialog open={open} onOpenChange={setOpen}>
+          <DialogContent className="h-[calc(100dvh-2rem)] max-w-[calc(100vw-2rem)] sm:max-w-[calc(100vw-4rem)]">
+            <DialogHeader>
+              <DialogTitle>{title}</DialogTitle>
+              {description ? <DialogDescription>{description}</DialogDescription> : null}
+            </DialogHeader>
+            <div className="min-h-0 flex-1 overflow-auto p-4">
+              <ExpandedViewContext.Provider value>{expanded ?? children}</ExpandedViewContext.Provider>
+            </div>
+          </DialogContent>
+        </Dialog>
+      ) : null}
     </Card>
   );
 }

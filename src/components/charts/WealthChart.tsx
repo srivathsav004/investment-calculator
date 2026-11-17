@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo } from "react";
+import { useContext, useMemo } from "react";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Line, LineChart, ReferenceDot, ReferenceLine, XAxis, YAxis } from "recharts";
 import { ChartContainer, ChartTooltip, type ChartConfig } from "@/components/ui/chart";
 import { cn } from "@/lib/utils";
+import { ExpandedViewContext } from "@/components/common/display";
 import { formatAxisINR, formatCompactINR, formatINRExact, formatPct } from "@/lib/formatters";
 
 export interface ChartSeries {
@@ -141,6 +142,7 @@ export function WealthChart<T extends object>({
   className,
   xType = "category",
 }: WealthChartProps<T>) {
+  const expandedView = useContext(ExpandedViewContext);
   const config = useMemo<ChartConfig>(
     () => Object.fromEntries(series.map((s) => [s.key, { label: s.label, color: s.color }])),
     [series],
@@ -213,7 +215,7 @@ export function WealthChart<T extends object>({
   return (
     <div className={cn("space-y-3", className)}>
       {series.length > 1 ? <ChartLegend series={series} /> : null}
-      <ChartContainer config={config} className="aspect-auto w-full" style={{ height }}>
+      <ChartContainer config={config} className="aspect-auto w-full" style={{ height: expandedView ? "calc(100dvh - 13rem)" : height }}>
         {kind === "bar" ? (
           <BarChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }} barCategoryGap="18%">
             {axes}

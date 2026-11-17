@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -162,6 +163,32 @@ export function SelectField<T extends string>({ id, label, value, options, onCha
           ))}
         </SelectContent>
       </Select>
+    </div>
+  );
+}
+
+interface DateFieldProps {
+  id: string;
+  label: string;
+  value: string;
+  /** "date" for YYYY-MM-DD, "month" for YYYY-MM. */
+  type: "date" | "month";
+  min?: string;
+  max?: string;
+  onChange: (value: string) => void;
+  info?: ReactNode;
+}
+
+export function DateField({ id, label, value, type, min, max, onChange, info }: DateFieldProps) {
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-1.5">
+        <Label htmlFor={id} className="text-xs font-medium text-muted-foreground">
+          {label}
+        </Label>
+        {info ? <InfoTip>{info}</InfoTip> : null}
+      </div>
+      <Input id={id} type={type} value={value} min={min} max={max} onChange={(event) => event.target.value && onChange(event.target.value)} className="num" />
     </div>
   );
 }
