@@ -12,9 +12,6 @@ const nextConfig: NextConfig = {
       },
     },
   },
-  async redirects() {
-    return [{ source: "/bonds-comparator", destination: "/bonds", permanent: true }];
-  },
 };
 
 export default nextConfig;

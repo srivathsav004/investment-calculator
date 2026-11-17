@@ -12,7 +12,6 @@ import {
   Landmark,
   LayoutDashboard,
   Moon,
-  ScrollText,
   Sun,
   type LucideIcon,
 } from "lucide-react";
@@ -54,7 +53,6 @@ const CALCULATORS: NavItem[] = [
   { href: "/epf", label: "EPF + VPF", description: "Provident Fund & EPS", icon: BriefcaseBusiness },
   { href: "/auto-sweep", label: "Auto-Sweep", description: "ICICI Money Multiplier", icon: ArrowDownUp },
   { href: "/idfc-vs-sweep", label: "IDFC vs Sweep", description: "Progressive savings crossover", icon: GitCompareArrows },
-  { href: "/bonds", label: "Corporate Bonds", description: "Coupons & reinvestment", icon: ScrollText },
 ];
 
 const INFLATION_OPTIONS = [0.04, 0.05, 0.06, 0.07, 0.08];

@@ -24,7 +24,7 @@ export const metadata: Metadata = {
     template: "%s · Wealth Simulator",
   },
   description:
-    "Fixed-income & provident-fund simulator for Indian investors: PPF, EPF + VPF, auto-sweep FDs, progressive savings and corporate bonds with FY 2026–27 tax rules.",
+    "Fixed-income & provident-fund simulator for Indian investors: PPF, EPF + VPF, auto-sweep FDs and progressive savings with FY 2026–27 tax rules.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useMemo } from "react";
-import { ArrowRight, ArrowDownUp, BriefcaseBusiness, GitCompareArrows, Landmark, Lock, ScrollText, Trophy, Wallet } from "lucide-react";
+import { ArrowRight, ArrowDownUp, BriefcaseBusiness, GitCompareArrows, Landmark, Lock, Trophy, Wallet } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useUrlState } from "@/lib/url-state";
 import { annualisedMonthlyIrr, formatCompactINR, formatINR, formatPct, fyLabel } from "@/lib/formatters";
@@ -11,7 +11,7 @@ import { PPF_LOCK_IN_YEARS, PPF_MAX_ANNUAL_DEPOSIT, simulatePpf } from "@/lib/en
 import { simulateVoluntaryPf } from "@/lib/engines/epfEngine";
 import { simulateSweep, SWEEP_DEFAULT_FD_RATE, SWEEP_DEFAULT_SAVINGS_RATE } from "@/lib/engines/sweepEngine";
 import { simulateIdfc } from "@/lib/engines/idfcEngine";
-import { simulateRecurringTaxable } from "@/lib/engines/bondEngine";
+import { simulateRecurringTaxable } from "@/lib/engines/fdEngine";
 import { useGlobalSettings } from "@/components/providers/GlobalSettingsProvider";
 import { KpiCard, Money, PageHeader, SectionCard } from "@/components/common/display";
 import { SliderField } from "@/components/common/fields";
@@ -26,11 +26,11 @@ const DEFAULTS = {
   yrs: 15,
   ppf: 0.071,
   epf: 0.0825,
-  ytm: 0.105,
+ 
   fd: 0.07,
 };
 
-type AssetKey = "ppf" | "vpf" | "sweep" | "idfc" | "bonds" | "fd";
+type AssetKey = "ppf" | "vpf" | "sweep" | "idfc" | "fd";
 
 interface AssetResult {
   key: AssetKey;
@@ -56,7 +56,6 @@ const CALCULATOR_LINKS: { href: string; title: string; body: string; icon: Lucid
   { href: "/epf", title: "EPF + VPF", body: "₹25k wage ceiling, EPS cap, ₹2.5L taxable-interest split", icon: BriefcaseBusiness },
   { href: "/auto-sweep", title: "Auto-Sweep", body: "₹5k sweep units, LIFO reverse sweep, 1% break penalty, TDS", icon: ArrowDownUp },
   { href: "/idfc-vs-sweep", title: "IDFC vs Sweep", body: "Progressive daily-balance slabs, 80TTA, exact crossover", icon: GitCompareArrows },
-  { href: "/bonds", title: "Corporate Bonds", body: "Monthly/quarterly coupons with post-tax FD reinvestment", icon: ScrollText },
 ];
 
 function monthlyIrr(monthly: number, months: number, final: number): number {
@@ -68,7 +67,7 @@ function monthlyIrr(monthly: number, months: number, final: number): number {
 export function PortfolioOverview() {
   const { slab, regime, adjust, adjustRate, isReal, navQuery } = useGlobalSettings();
   const [s, set, reset] = useUrlState(DEFAULTS, {
-    bounds: { sip: [1000, 100000], yrs: [1, 35], ppf: [0.06, 0.09], epf: [0.07, 0.095], ytm: [0.09, 0.12], fd: [0.05, 0.09] },
+    bounds: { sip: [1000, 100000], yrs: [1, 35], ppf: [0.06, 0.09], epf: [0.07, 0.095], fd: [0.05, 0.09] },
   });
 
   const assets = useMemo<AssetResult[]>(() => {
@@ -101,7 +100,6 @@ export function PortfolioOverview() {
       tdsEnabled: false,
     });
     const idfc = simulateIdfc({ initialBalance: 0, monthlySurplus: s.sip, annualWithdrawal: 0, withdrawalMonth: 1, years: s.yrs, taxSlab: slab, regime });
-    const bonds = simulateRecurringTaxable(s.sip, s.yrs, s.ytm, slab, 1);
     const fd = simulateRecurringTaxable(s.sip, s.yrs, s.fd, slab, 3);
 
     const build = (base: Omit<AssetResult, "invested" | "final" | "xirr">): AssetResult => {
@@ -128,10 +126,9 @@ export function PortfolioOverview() {
       build({ key: "vpf", name: "VPF @ EPF rate", tax: "Partly taxable", liquidity: "Retirement / 5-yr rule", color: "var(--chart-2)", monthly: s.sip, values: vpfValues, note: s.sip * 12 > 250000 ? "Interest on contributions above ₹2.5L/yr is taxed" : undefined }),
       build({ key: "sweep", name: "ICICI Auto-Sweep", tax: "Taxable", liquidity: "Same day", color: "var(--chart-3)", monthly: s.sip, values: sweep.rows.map((r) => r.total) }),
       build({ key: "idfc", name: "IDFC Progressive", tax: "Taxable", liquidity: "Same day", color: "var(--chart-4)", monthly: s.sip, values: idfc.rows.map((r) => r.closing) }),
-      build({ key: "bonds", name: "Corporate bonds", tax: "Taxable", liquidity: "Listed · thin market", color: "var(--chart-5)", monthly: s.sip, values: bonds.map((r) => r.value), note: "Credit risk not modelled" }),
       build({ key: "fd", name: "Bank FD", tax: "Taxable", liquidity: "Break penalty", color: "var(--chart-6)", monthly: s.sip, values: fd.map((r) => r.value) }),
     ];
-  }, [s.sip, s.yrs, s.ppf, s.epf, s.ytm, s.fd, slab, regime]);
+  }, [s.sip, s.yrs, s.ppf, s.epf, s.fd, slab, regime]);
 
   const series = useMemo<ChartSeries[]>(() => assets.map((a) => ({ key: a.key, label: a.name, color: a.color })), [assets]);
 
@@ -190,13 +187,12 @@ export function PortfolioOverview() {
             <SliderField id="ov-yrs" label="Horizon" value={s.yrs} min={1} max={35} step={1} format={(v) => `${v} yrs`} onChange={(v) => set("yrs", v)} />
             <SliderField id="ov-ppf" label="PPF rate" value={s.ppf} min={0.06} max={0.09} step={0.0005} format={(v) => formatPct(v)} onChange={(v) => set("ppf", v)} />
             <SliderField id="ov-epf" label="EPF / VPF rate" value={s.epf} min={0.07} max={0.095} step={0.0005} format={(v) => formatPct(v)} onChange={(v) => set("epf", v)} />
-            <SliderField id="ov-ytm" label="Corporate bond YTM" value={s.ytm} min={0.09} max={0.12} step={0.0005} format={(v) => formatPct(v)} onChange={(v) => set("ytm", v)} />
             <SliderField id="ov-fd" label="Bank FD rate" value={s.fd} min={0.05} max={0.09} step={0.0005} format={(v) => formatPct(v)} onChange={(v) => set("fd", v)} />
           </div>
         </SectionCard>
 
         <div className="min-w-0 space-y-4">
-          <SectionCard title="Post-tax corpus by asset" description={isReal ? "Inflation-adjusted to today's rupees" : "Nominal rupees on 31 March"}>
+          <SectionCard title="Post-tax corpus by asset" description={isReal ? "Inflation-adjusted to today's rupees" : "Nominal rupees on 31 March"} expandable>
             <WealthChart data={chartData} xKey="year" series={series} kind="line" height={340} xTickFormatter={(v) => `Y${v}`} tooltipLabel={(v) => `Year ${v} · ${fyLabel(Number(v))}`} />
           </SectionCard>
 
@@ -266,7 +262,7 @@ export function PortfolioOverview() {
 
       <div>
         <h2 className="mb-3 text-sm font-semibold">Deep-dive calculators</h2>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {CALCULATOR_LINKS.map(({ href, title, body, icon: Icon }) => (
             <Link key={href} href={`${href}${navQuery}`} className="group">
               <Card className="h-full gap-0 rounded-lg py-0 shadow-none transition-colors group-hover:border-foreground/25">
